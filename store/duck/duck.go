@@ -1,19 +1,151 @@
-package parcours
+package duck
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 
 	"github.com/pkg/errors"
+
+	"parcours"
 )
 
-func newDuck() (db *sql.DB, err error) {
-
-	db, err = sql.Open("duckdb", "")
-	err = errors.Wrapf(err, "failed to open memo duck")
-	return
-	//Todo: where? defer db.Close()
+type Duck struct {
+	db     *sql.DB
+	logger parcours.Logger
+	filter parcours.Filter
+	sorts  []parcours.Sort
 }
+
+func New(lgr parcours.Logger) (dk *Duck, err error) {
+
+	db, err := sql.Open("duckdb", "")
+	if err != nil {
+		err = errors.Wrapf(err, "failed to open memo duck")
+		return
+	}
+
+	dk = &Duck{
+		db:     db,
+		logger: lgr,
+	}
+
+	return
+}
+
+func (dk *Duck) Close() {
+	dk.db.Close()
+}
+
+// Load a file
+func (dk *Duck) Load(path string, last int) (err error) {
+	err = loadDualTable(dk.db, path)
+	return
+}
+
+// Follow a file
+func (dk *Duck) Follow(ctx context.Context, path string, last int) (err error) {
+	// Todo:
+	return errors.New("not implemented")
+}
+
+// Promote a field
+func (dk *Duck) Promote(field string) (err error) {
+	err = PromoteField(dk.db, field)
+	if err != nil {
+		return
+	}
+	err = IndexField(dk.db, field)
+	return
+}
+
+// SetView Filter and Sort(s)
+func (dk *Duck) SetView(filter parcours.Filter, sorts []parcours.Sort) (err error) {
+	dk.filter = filter
+	dk.sorts = sorts
+	return nil
+}
+
+// GetView fields and count
+func (dk *Duck) GetView() (fields []parcours.Field, count int, err error) {
+	// Get fields from schema
+	rawFields, err := getFields(dk.db)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// Convert to parcours.Field
+	fields = make([]parcours.Field, len(rawFields))
+	for i, f := range rawFields {
+		fields[i] = parcours.Field{
+			Name: f.Name,
+			Type: f.Type,
+		}
+	}
+
+	// Get count (TODO: apply filter)
+	err = dk.db.QueryRow("SELECT COUNT(*) FROM logs").Scan(&count)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to count logs")
+		return nil, 0, err
+	}
+
+	return fields, count, nil
+}
+
+// GetPage of log lines
+func (dk *Duck) GetPage(offset, size int) (lines []parcours.Line, err error) {
+	// Get fields to know column order
+	fields, _, err := dk.GetView()
+	if err != nil {
+		return nil, err
+	}
+
+	// Build query (TODO: apply filter and sort)
+	query := fmt.Sprintf("SELECT * FROM logs LIMIT %d OFFSET %d", size, offset)
+
+	rows, err := dk.db.Query(query)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to query logs")
+	}
+	defer rows.Close()
+
+	// Scan rows into Lines
+	for rows.Next() {
+		// Create slice of interface{} for scanning
+		values := make([]any, len(fields))
+		valuePtrs := make([]any, len(fields))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, errors.Wrapf(err, "failed to scan row")
+		}
+
+		// Convert to parcours.Line
+		line := make(parcours.Line, len(values))
+		for i, v := range values {
+			line[i] = parcours.Value{Raw: v}
+		}
+
+		lines = append(lines, line)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, errors.Wrapf(err, "error iterating rows")
+	}
+
+	return lines, nil
+}
+
+// Tail streams log lines
+func (dk *Duck) Tail(ctx context.Context) (lines <-chan parcours.Line, err error) {
+	// Todo:
+	return nil, errors.New("not implemented")
+}
+
+// unexported
 
 func loadDualTable(db *sql.DB, logFile string) (err error) {
 	// Todo: ID alignment issue

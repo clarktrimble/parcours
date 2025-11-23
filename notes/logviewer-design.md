@@ -1,5 +1,7 @@
 # Log Viewer with DuckDB - Design Document
 
+NOTE: pre-alpha design here, duck stuff likely dated
+
 ## Overview
 
 A log viewer backed by in-memory DuckDB for fast analytics on structured logs. Supports dynamic schema evolution as new fields appear in logs.
