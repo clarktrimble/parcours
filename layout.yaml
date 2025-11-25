@@ -1,0 +1,18 @@
+columns:
+  - field: timestamp
+    width: 14
+    format: "15:04:05.000"
+  - field: level
+    width: 8
+  - field: message
+    width: 40
+  - field: app_id
+    width: 12
+  - field: run_id
+    width: 10
+  - field: headers
+    demote: true
+    json: true
+  - field: body
+    demote: true
+    json: true

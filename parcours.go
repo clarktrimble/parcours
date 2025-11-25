@@ -4,6 +4,8 @@ import (
 	"context"
 )
 
+// Todo: look a delish remote_ip logging, borken with "["?
+
 // Logger specifies a contextual, structured logger.
 type Logger interface {
 	Info(ctx context.Context, msg string, kv ...any)
@@ -30,6 +32,8 @@ type Store interface {
 	GetView() (fields []Field, count int, err error)
 	// GetPage of log lines
 	GetPage(offset, size int) (lines []Line, err error)
+	// GetJson returns raw json for a log line
+	GetJson(id string) (data map[string]any, err error)
 	// Tail streams log lines
 	Tail(ctx context.Context) (lines <-chan Line, err error)
 }

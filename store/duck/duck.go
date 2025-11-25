@@ -10,6 +10,8 @@ import (
 	"parcours"
 )
 
+// Todo: use uptodate lib from duckdb in main
+
 type Duck struct {
 	db     *sql.DB
 	logger parcours.Logger
@@ -95,48 +97,79 @@ func (dk *Duck) GetView() (fields []parcours.Field, count int, err error) {
 
 // GetPage of log lines
 func (dk *Duck) GetPage(offset, size int) (lines []parcours.Line, err error) {
-	// Get fields to know column order
-	fields, _, err := dk.GetView()
-	if err != nil {
-		return nil, err
-	}
 
-	// Build query (TODO: apply filter and sort)
+	// Todo: apply filter and sort
+
 	query := fmt.Sprintf("SELECT * FROM logs LIMIT %d OFFSET %d", size, offset)
 
 	rows, err := dk.db.Query(query)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to query logs")
+		err = errors.Wrapf(err, "failed to query logs")
+		return
 	}
 	defer rows.Close()
 
-	// Scan rows into Lines
+	count, err := columnCount(rows)
+	if err != nil {
+		return
+	}
+
 	for rows.Next() {
-		// Create slice of interface{} for scanning
-		values := make([]any, len(fields))
-		valuePtrs := make([]any, len(fields))
-		for i := range values {
-			valuePtrs[i] = &values[i]
+		var vals []any
+		vals, err = scanRow(rows, count)
+		if err != nil {
+			err = errors.Wrapf(err, "failed to scan row")
+			return
 		}
 
-		if err := rows.Scan(valuePtrs...); err != nil {
-			return nil, errors.Wrapf(err, "failed to scan row")
+		line := make(parcours.Line, count)
+		for i, val := range vals {
+			line[i] = parcours.Value{Raw: val}
 		}
-
-		// Convert to parcours.Line
-		line := make(parcours.Line, len(values))
-		for i, v := range values {
-			line[i] = parcours.Value{Raw: v}
-		}
-
 		lines = append(lines, line)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, errors.Wrapf(err, "error iterating rows")
+	err = rows.Err()
+	err = errors.Wrapf(err, "error iterating rows")
+	return
+}
+
+func columnCount(rows *sql.Rows) (int, error) {
+	cols, err := rows.Columns()
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to get cols from query rows")
+	}
+	return len(cols), nil
+}
+
+func scanRow(rows *sql.Rows, columnCount int) ([]any, error) {
+	vals := make([]any, columnCount)
+	ptrs := make([]any, columnCount)
+	for i := range vals {
+		ptrs[i] = &vals[i]
+	}
+	err := rows.Scan(ptrs...)
+	return vals, err
+}
+
+// GetJson returns raw json for a line
+func (dk *Duck) GetJson(id string) (data map[string]any, err error) {
+
+	query := "SELECT raw FROM logs_raw WHERE id = ?"
+
+	var raw any
+	err = dk.db.QueryRow(query, id).Scan(&raw)
+	if err != nil {
+		err = errors.Wrapf(err, "failed to query raw JSON")
+		return
 	}
 
-	return lines, nil
+	var ok bool
+	data, ok = raw.(map[string]any)
+	if !ok {
+		err = errors.Errorf("expected map[string]any from driver, got %T", raw)
+	}
+	return
 }
 
 // Tail streams log lines
@@ -179,12 +212,12 @@ func loadDualTable(db *sql.DB, logFile string) (err error) {
 		return
 	}
 
-	// Table 2: Raw JSON text
+	// Table 2: Raw JSON
 	createRaw := fmt.Sprintf(`
 		CREATE TABLE logs_raw AS
 		SELECT
 			ROW_NUMBER() OVER () as id,
-			json_text as raw
+			json_text::JSON as raw
 		FROM read_json_objects('%s', format='newline_delimited') AS t(json_text)
 	`, logFile)
 
