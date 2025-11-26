@@ -1,6 +1,8 @@
 package parcours
 
 import (
+	"encoding/json"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -17,9 +19,15 @@ type Model struct {
 	// Current screen
 	CurrentScreen Screen
 
-	// Models
-	TableModel  *TableModel
-	DetailModel *DetailModel
+	// Data (loaded from Store)
+	Fields     []Field
+	Lines      []Line
+	TotalLines int
+	FullRecord map[string]any
+
+	// Child panes (display state only)
+	TablePane  *TablePane
+	DetailPane *DetailPane
 
 	// Terminal dimensions
 	Width  int
@@ -50,41 +58,155 @@ func NewModel(store Store) Model {
 		}
 	}
 
-	tableModel := NewTableModel(store, layout)
-	tableModel.Focused = true // Start with table focused
-
-	detailModel := NewDetailModel(store, layout, tableModel)
+	tablePane := NewTablePane()
+	detailPane := NewDetailPane()
 
 	return Model{
 		Store:         store,
 		Layout:        layout,
 		CurrentScreen: TableScreen,
-		TableModel:    tableModel,
-		DetailModel:   detailModel,
+		TablePane:     tablePane,
+		DetailPane:    detailPane,
 	}
 }
 
+// pageMsg contains loaded page data
+type pageMsg struct {
+	fields []Field
+	lines  []Line
+	count  int
+	err    error
+}
+
+// detailDataMsg contains loaded detail record data
+type detailDataMsg struct {
+	data map[string]any
+	err  error
+}
+
 func (m Model) Init() tea.Cmd {
-	return m.TableModel.Init()
+	// Don't load data yet - wait for WindowSizeMsg first
+	return nil
+}
+
+// getPage loads a page of data from the store
+func (m Model) getPage(offset, size int) tea.Cmd {
+	return func() tea.Msg {
+		fields, count, err := m.Store.GetView()
+		if err != nil {
+			return pageMsg{err: err}
+		}
+
+		lines, err := m.Store.GetPage(offset, size)
+		if err != nil {
+			return pageMsg{err: err}
+		}
+
+		return pageMsg{
+			fields: fields,
+			lines:  lines,
+			count:  count,
+		}
+	}
+}
+
+// loadDetailData loads a full record from the store
+func (m Model) loadDetailData(id string) tea.Cmd {
+	return func() tea.Msg {
+		data, err := m.Store.GetLine(id)
+		if err != nil {
+			return detailDataMsg{err: err}
+		}
+		// Parse JSON fields before returning
+		parsed := parseJsonFields(data, m.Layout)
+		return detailDataMsg{data: parsed}
+	}
+}
+
+// parseJsonFields parses JSON-escaped strings in configured fields
+// Note: mutates data map in place
+func parseJsonFields(data map[string]any, layout *Layout) map[string]any {
+	// Build map of fields that should be parsed
+	jsonFields := make(map[string]bool)
+	for _, col := range layout.Columns {
+		if col.Json {
+			jsonFields[col.Field] = true
+		}
+	}
+
+	// Loop over actual data fields
+	for key, val := range data {
+		// Skip if not configured for JSON parsing
+		if !jsonFields[key] {
+			continue
+		}
+
+		// Check if field is a string
+		str, ok := val.(string)
+		if !ok {
+			continue
+		}
+
+		// Skip empty strings
+		if str == "" {
+			continue
+		}
+
+		// Try to parse as JSON
+		var parsed any
+		err := json.Unmarshal([]byte(str), &parsed)
+		if err == nil {
+			data[key] = parsed
+		}
+		// If parsing fails, keep original string value
+	}
+
+	return data
 }
 
 // switchToTable switches to the table screen and manages focus
 func (m *Model) switchToTable() {
 	m.CurrentScreen = TableScreen
-	m.TableModel.Focused = true
-	m.DetailModel.Focused = false
+	m.TablePane.Focused = true
+	m.DetailPane.Focused = false
 }
 
 // switchToDetail switches to the detail screen and manages focus
 func (m *Model) switchToDetail() {
 	m.CurrentScreen = DetailScreen
-	m.TableModel.Focused = false
-	m.DetailModel.Focused = true
+	m.TablePane.Focused = false
+	m.DetailPane.Focused = true
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
+	case pageMsg:
+		if msg.err != nil {
+			// TODO: handle error
+			return m, nil
+		}
+		m.Fields = msg.fields
+		m.Lines = msg.lines
+		m.TotalLines = msg.count
+		// Update TablePane's line counts
+		m.TablePane.CurrentLines = len(msg.lines)
+		m.TablePane.TotalLines = msg.count
+		return m, nil
+
+	case detailDataMsg:
+		if msg.err != nil {
+			// TODO: handle error - maybe show error in detail view
+			m.FullRecord = map[string]any{"error": msg.err.Error()}
+			return m, nil
+		}
+		m.FullRecord = msg.data
+		return m, nil
+
+	case getPageMsg:
+		// TablePane scrolled and needs new data
+		return m, m.getPage(msg.Offset, msg.Size)
+
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -103,7 +225,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Navigate right: table → detail
 			if m.CurrentScreen == TableScreen {
 				m.switchToDetail()
-				return m, m.DetailModel.LoadCurrentRecord()
+				// Load detail for currently selected row
+				id := m.TablePane.GetSelectedID(m.Lines)
+				if id != "" {
+					return m, m.loadDetailData(id)
+				}
+				return m, nil
 			}
 
 		case "left", "h":
@@ -112,6 +239,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.switchToTable()
 				return m, nil
 			}
+
+			/*
+				case "up", "k", "down", "j":
+					// In detail view, navigate through records
+					if m.CurrentScreen == DetailScreen {
+						var cmd tea.Cmd
+						m.TablePane, cmd = m.TablePane.Update(msg)
+						// Load detail for newly selected row
+						id := m.TablePane.GetSelectedID(m.Lines)
+						if id != "" {
+							return m, tea.Sequence(cmd, m.loadDetailData(id))
+						}
+						return m, cmd
+					}
+			*/
 		}
 
 	case tea.WindowSizeMsg:
@@ -123,15 +265,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Height: msg.Height - footerHeight,
 		}
 		var cmd1, cmd2 tea.Cmd
-		m.TableModel, cmd1 = m.TableModel.Update(adjustedMsg)
-		m.DetailModel, cmd2 = m.DetailModel.Update(adjustedMsg)
+		m.TablePane, cmd1 = m.TablePane.Update(adjustedMsg)
+		m.DetailPane, cmd2 = m.DetailPane.Update(adjustedMsg)
 
 		return m, tea.Sequence(cmd1, cmd2)
 	}
 
+	// Broadcast to all child components
 	var cmd1, cmd2 tea.Cmd
-	m.TableModel, cmd1 = m.TableModel.Update(msg)
-	m.DetailModel, cmd2 = m.DetailModel.Update(msg)
+	m.TablePane, cmd1 = m.TablePane.Update(msg)
+	m.DetailPane, cmd2 = m.DetailPane.Update(msg)
 	return m, tea.Sequence(cmd1, cmd2)
 }
 
@@ -140,13 +283,13 @@ func (m Model) View() tea.View {
 		return tea.NewView("Loading...")
 	}
 
-	// Get current screen's content from child models
+	// Get current screen's content from child panes (pass data to them)
 	var screenContent string
 	switch m.CurrentScreen {
 	case DetailScreen:
-		screenContent = m.DetailModel.View()
+		screenContent = m.DetailPane.Render(m.FullRecord)
 	case TableScreen:
-		screenContent = m.TableModel.View()
+		screenContent = m.TablePane.Render(m.Fields, m.Lines, m.Layout)
 	default:
 		screenContent = "Unknown screen"
 	}
@@ -155,8 +298,8 @@ func (m Model) View() tea.View {
 	screenLayer := lipgloss.NewLayer("screen", screenContent)
 
 	// Create footer content and layer positioned at bottom
-	current := m.TableModel.ScrollOffset + m.TableModel.SelectedRow + 1
-	total := m.TableModel.TotalLines
+	current := m.TablePane.ScrollOffset + m.TablePane.SelectedRow + 1
+	total := m.TablePane.TotalLines
 	footerContent := RenderFooter(current, total, m.Store.Name(), m.Width)
 	footerLayer := lipgloss.NewLayer("footer", footerContent).Y(m.Height - footerHeight)
 

@@ -4,74 +4,39 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// TableModel handles the table view display and navigation
-type TableModel struct {
-	Store  Store
-	Layout *Layout
+const (
+	// tableHeaderLines is the number of lines used by the table header
+	// (header row + separator line)
+	tableHeaderLines = 2
+)
 
-	// View data
-	Fields     []Field
-	Lines      []Line
-	TotalLines int
-
+// TablePane handles the table view display and navigation state
+type TablePane struct {
 	// Display state
-	ScrollOffset int
-	SelectedRow  int
-	Width        int
-	Height       int
-	Focused      bool
+	ScrollOffset   int
+	SelectedRow    int
+	Width          int
+	Height         int
+	Focused        bool
+	CurrentLines   int // Number of lines currently loaded
+	TotalLines     int // Total lines available (set by parent)
+	initialized    bool // Whether initial data has been requested
 }
 
-type tableLoadDataMsg struct {
-	fields []Field
-	lines  []Line
-	count  int
-	err    error
+// getPageMsg signals parent to load a new page of data
+type getPageMsg struct {
+	Offset int
+	Size   int
 }
 
-func NewTableModel(store Store, layout *Layout) *TableModel {
-	return &TableModel{
-		Store:  store,
-		Layout: layout,
+func NewTablePane() *TablePane {
+	return &TablePane{
+		Focused: true, // Start with table focused
 	}
 }
 
-func (m *TableModel) Init() tea.Cmd {
-	return m.loadData()
-}
-
-func (m *TableModel) loadData() tea.Cmd {
-	return func() tea.Msg {
-		fields, count, err := m.Store.GetView()
-		if err != nil {
-			return tableLoadDataMsg{err: err}
-		}
-
-		lines, err := m.Store.GetPage(m.ScrollOffset, 20)
-		if err != nil {
-			return tableLoadDataMsg{err: err}
-		}
-
-		return tableLoadDataMsg{
-			fields: fields,
-			lines:  lines,
-			count:  count,
-		}
-	}
-}
-
-func (m *TableModel) Update(msg tea.Msg) (*TableModel, tea.Cmd) {
+func (m *TablePane) Update(msg tea.Msg) (*TablePane, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tableLoadDataMsg:
-		if msg.err != nil {
-			// TODO: handle error
-			return m, nil
-		}
-		m.Fields = msg.fields
-		m.Lines = msg.lines
-		m.TotalLines = msg.count
-		return m, nil
-
 	case tea.KeyPressMsg:
 		// Only handle keys when focused
 		if !m.Focused {
@@ -84,37 +49,67 @@ func (m *TableModel) Update(msg tea.Msg) (*TableModel, tea.Cmd) {
 				m.SelectedRow--
 			} else if m.ScrollOffset > 0 {
 				m.ScrollOffset--
-				return m, m.loadData()
+				// Signal parent to load new page
+				pageSize := m.Height - tableHeaderLines
+				return m, func() tea.Msg {
+					return getPageMsg{
+						Offset: m.ScrollOffset,
+						Size:   pageSize,
+					}
+				}
 			}
+
 		case "down", "j":
-			if m.SelectedRow < len(m.Lines)-1 {
+			if m.SelectedRow < m.CurrentLines-1 {
 				m.SelectedRow++
-			} else if m.ScrollOffset+len(m.Lines) < m.TotalLines {
+			} else if m.ScrollOffset+m.CurrentLines < m.TotalLines {
 				m.ScrollOffset++
-				return m, m.loadData()
+				// Signal parent to load new page
+				pageSize := m.Height - tableHeaderLines
+				return m, func() tea.Msg {
+					return getPageMsg{
+						Offset: m.ScrollOffset,
+						Size:   pageSize,
+					}
+				}
 			}
 		}
 
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
+
+		// Request initial data load when we first get dimensions
+		if !m.initialized && m.Height > 0 {
+			m.initialized = true
+			pageSize := m.Height - tableHeaderLines
+			if pageSize > 0 {
+				return m, func() tea.Msg {
+					return getPageMsg{
+						Offset: 0,
+						Size:   pageSize,
+					}
+				}
+			}
+		}
 	}
 
 	return m, nil
 }
 
-func (m *TableModel) View() string {
+// Render renders the table with the given data
+func (m *TablePane) Render(fields []Field, lines []Line, layout *Layout) string {
 	if m.Width == 0 {
 		return "Loading..."
 	}
 
-	return RenderTable(m.Fields, m.Lines, m.SelectedRow, m.Width, m.Layout)
+	return RenderTable(fields, lines, m.SelectedRow, m.Width, layout)
 }
 
 // GetSelectedID returns the ID of the currently selected line
-func (m *TableModel) GetSelectedID() string {
-	if len(m.Lines) == 0 || m.SelectedRow >= len(m.Lines) {
+func (m *TablePane) GetSelectedID(lines []Line) string {
+	if len(lines) == 0 || m.SelectedRow >= len(lines) {
 		return ""
 	}
-	return m.Lines[m.SelectedRow][0].String()
+	return lines[m.SelectedRow][0].String()
 }
