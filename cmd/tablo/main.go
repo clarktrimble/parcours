@@ -1,32 +1,57 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"os"
 
+	tea "charm.land/bubbletea/v2"
+	"github.com/clarktrimble/sabot"
 	_ "github.com/marcboeker/go-duckdb"
 
-	tea "charm.land/bubbletea/v2"
 	"parcours"
 	"parcours/store/duck"
+	"parcours/util"
 )
 
-// Simple logger that prints to stdout
-type simpleLogger struct{}
-
-func (l *simpleLogger) Info(ctx context.Context, msg string, kv ...any) {
-	fmt.Printf("[INFO] %s %v\n", msg, kv)
-}
-
-func (l *simpleLogger) Error(ctx context.Context, msg string, err error, kv ...any) {
-	fmt.Printf("[ERROR] %s: %v %v\n", msg, err, kv)
-}
+const (
+	logFile string = "parcours.log"
+	logMax  int    = 999
+	//cfgFile string      = "powercycle.yml"
+	mode os.FileMode = 0600
+)
 
 func main() {
 
-	logger := &simpleLogger{}
-	dk, err := duck.New(logger)
+	// setup logging
+
+	logCfg := &sabot.Config{MaxLen: logMax, EnableDebug: true} // Todo: cfg
+	file := util.OpenLog(logFile, mode)
+
+	lgr := logCfg.New(file)
+	//ctx := context.Background()
+
+	// load cfg
+
+	//cfg := &Config{Version: version, Release: release, PowerCycle: &powercycle.Config{}}
+	//cfgErr := util.LoadConfig(cfg, cfgFile)
+	//lgr.Info(ctx, "starting", "cfg", cfg)
+
+	/*
+		// Simple logger that prints to stdout
+		type simpleLogger struct{}
+
+		func (l *simpleLogger) Info(ctx context.Context, msg string, kv ...any) {
+			fmt.Printf("[INFO] %s %v\n", msg, kv)
+		}
+
+		func (l *simpleLogger) Error(ctx context.Context, msg string, err error, kv ...any) {
+			fmt.Printf("[ERROR] %s: %v %v\n", msg, err, kv)
+		}
+
+		func main() {
+
+			logger := &simpleLogger{}
+	*/
+	dk, err := duck.New(lgr)
 	if err != nil {
 		panic(err)
 	}
@@ -34,18 +59,26 @@ func main() {
 
 	//logFile := "test/data/smar.log"
 	logFile := "junk/tag2.log"
-	if err := dk.Load(logFile, 0); err != nil {
+
+	// Todo: dont panic
+
+	err = dk.Load(logFile, 0)
+	if err != nil {
 		panic(err)
 	}
 
-	if err := dk.SetView(parcours.Filter{}, nil); err != nil {
+	err = dk.SetView(parcours.Filter{}, nil)
+	if err != nil {
 		panic(err)
 	}
 
-	model := parcours.NewModel(dk)
-	p := tea.NewProgram(model)
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
+	model, err := parcours.NewModel(dk, lgr)
+	if err != nil {
+		panic(err)
+	}
+
+	_, err = tea.NewProgram(model).Run()
+	if err != nil {
+		panic(err)
 	}
 }

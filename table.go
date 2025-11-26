@@ -5,61 +5,40 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 )
 
-func RenderTable(fields []Field, lines []Line, selectedRow, width int, layout *Layout) string {
-	var b strings.Builder
-
-	// Build field lookup maps
-	fieldMap := make(map[string]Field)
+func RenderTable(t *table.Table, fields []Field, lines []Line, selectedRow, width int, layout *Layout) string {
+	// Build field lookup map
 	fieldIndex := make(map[string]int)
 	for i, f := range fields {
-		fieldMap[f.Name] = f
 		fieldIndex[f.Name] = i
 	}
 
-	// Header row
-	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	var headerCols []string
-	for _, col := range layout.Columns {
-		if col.Hidden || col.Demote {
-			continue
-		}
-		cell := headerStyle.Width(col.Width).Render(col.Field)
-		headerCols = append(headerCols, cell)
-	}
-	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Left, headerCols...))
-	b.WriteString("\n")
+	// Clear existing rows and add new data
+	t.ClearRows()
 
-	// Separator
-	sepStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	b.WriteString(sepStyle.Render(strings.Repeat("─", width)))
-	b.WriteString("\n")
-
-	// Data rows
-	for i, line := range lines {
-		var rowCols []string
+	// Add data rows
+	for _, line := range lines {
+		var row []string
 		for _, col := range layout.Columns {
 			if col.Hidden || col.Demote {
 				continue
 			}
 
-			cellStyle := lipgloss.NewStyle()
-			if i == selectedRow {
-				cellStyle = cellStyle.Background(lipgloss.Color("63"))
-			}
-
-			field := fieldMap[col.Field]
+			// Get field and format value
+			field := fields[fieldIndex[col.Field]]
 			idx := fieldIndex[col.Field]
 			formatted := formatValue(line[idx], field.Type, col.Format)
-			cell := cellStyle.Width(col.Width).Render(formatted)
-			rowCols = append(rowCols, cell)
+
+			// Pad/truncate to exact width
+			padded := fmt.Sprintf("%-*.*s", col.Width, col.Width, formatted)
+			row = append(row, padded)
 		}
-		b.WriteString(lipgloss.JoinHorizontal(lipgloss.Left, rowCols...))
-		b.WriteString("\n")
+		t.Row(row...)
 	}
 
-	return b.String()
+	return t.Render()
 }
 
 // RenderFooter renders a footer with metadata about the table.

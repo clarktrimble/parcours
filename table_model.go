@@ -2,6 +2,8 @@ package parcours
 
 import (
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 )
 
 const (
@@ -21,6 +23,9 @@ type TablePane struct {
 	CurrentLines   int // Number of lines currently loaded
 	TotalLines     int // Total lines available (set by parent)
 	initialized    bool // Whether initial data has been requested
+
+	// Cached table for rendering
+	table *table.Table
 }
 
 // getPageMsg signals parent to load a new page of data
@@ -103,7 +108,44 @@ func (m *TablePane) Render(fields []Field, lines []Line, layout *Layout) string 
 		return "Loading..."
 	}
 
-	return RenderTable(fields, lines, m.SelectedRow, m.Width, layout)
+	// Initialize table on first render
+	if m.table == nil {
+		m.table = table.New()
+
+		// Set headers
+		var headers []string
+		for _, col := range layout.Columns {
+			if col.Hidden || col.Demote {
+				continue
+			}
+			headers = append(headers, col.Field)
+		}
+		m.table.Headers(headers...)
+
+		// Configure styling - only separator between header and data
+		m.table.Border(lipgloss.Border{
+			Top:         "─", // Horizontal parts of separator
+			Middle:      "─", // Between columns in separator
+			MiddleLeft:  "─", // Left edge of separator
+			MiddleRight: "─", // Right edge of separator
+		}).
+			BorderTop(false).     // Disable top border
+			BorderBottom(false).  // Disable bottom border
+			BorderLeft(false).    // Disable left border
+			BorderRight(false).   // Disable right border
+			BorderColumn(false).  // Disable column separators
+			BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("240")))
+
+		m.table.StyleFunc(func(row, col int) lipgloss.Style {
+			if row == m.SelectedRow {
+				return lipgloss.NewStyle().Background(lipgloss.Color("63"))
+			}
+			return lipgloss.NewStyle()
+		})
+	}
+
+	// Update data
+	return RenderTable(m.table, fields, lines, m.SelectedRow, m.Width, layout)
 }
 
 // GetSelectedID returns the ID of the currently selected line

@@ -15,6 +15,7 @@ const (
 type Model struct {
 	Store  Store
 	Layout *Layout
+	logger Logger
 
 	// Current screen
 	CurrentScreen Screen
@@ -35,57 +36,44 @@ type Model struct {
 }
 
 // NewModel creates a new TUI model with the given store.
-func NewModel(store Store) Model {
+func NewModel(store Store, lgr Logger) (model Model, err error) {
+
 	layout, err := LoadLayout("layout.yaml")
 	if err != nil {
-		panic(err) // TODO: handle better
+		return
 	}
 
 	// Promote fields from layout
 	// TODO: improve error handling/logging so we can see promotion failures
 	for _, col := range layout.Columns {
-		// Skip demoted fields
+
 		if col.Demote {
 			continue
 		}
-		// Skip base fields that already exist
+		// Todo: fix to allow in impl
 		if col.Field == "timestamp" || col.Field == "message" {
 			continue
 		}
-		if err := store.Promote(col.Field); err != nil {
-			// TODO: log error instead of panicking
-			panic(err)
+
+		err = store.Promote(col.Field)
+		if err != nil {
+			return
 		}
 	}
 
-	tablePane := NewTablePane()
-	detailPane := NewDetailPane()
-
-	return Model{
+	model = Model{
 		Store:         store,
 		Layout:        layout,
+		logger:        lgr,
 		CurrentScreen: TableScreen,
-		TablePane:     tablePane,
-		DetailPane:    detailPane,
+		TablePane:     NewTablePane(),
+		DetailPane:    NewDetailPane(),
 	}
-}
 
-// pageMsg contains loaded page data
-type pageMsg struct {
-	fields []Field
-	lines  []Line
-	count  int
-	err    error
-}
-
-// detailDataMsg contains loaded detail record data
-type detailDataMsg struct {
-	data map[string]any
-	err  error
+	return
 }
 
 func (m Model) Init() tea.Cmd {
-	// Don't load data yet - wait for WindowSizeMsg first
 	return nil
 }
 
@@ -110,16 +98,16 @@ func (m Model) getPage(offset, size int) tea.Cmd {
 	}
 }
 
-// loadDetailData loads a full record from the store
-func (m Model) loadDetailData(id string) tea.Cmd {
+// getLine loads a full record from the store
+func (m Model) getLine(id string) tea.Cmd {
 	return func() tea.Msg {
 		data, err := m.Store.GetLine(id)
 		if err != nil {
-			return detailDataMsg{err: err}
+			return lineMsg{err: err}
 		}
-		// Parse JSON fields before returning
+
 		parsed := parseJsonFields(data, m.Layout)
-		return detailDataMsg{data: parsed}
+		return lineMsg{data: parsed}
 	}
 }
 
@@ -194,7 +182,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.TablePane.TotalLines = msg.count
 		return m, nil
 
-	case detailDataMsg:
+	case lineMsg:
 		if msg.err != nil {
 			// TODO: handle error - maybe show error in detail view
 			m.FullRecord = map[string]any{"error": msg.err.Error()}
@@ -225,10 +213,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Navigate right: table → detail
 			if m.CurrentScreen == TableScreen {
 				m.switchToDetail()
+				// Reset detail scroll when entering
+				m.DetailPane.ScrollOffset = 0
 				// Load detail for currently selected row
 				id := m.TablePane.GetSelectedID(m.Lines)
 				if id != "" {
-					return m, m.loadDetailData(id)
+					return m, m.getLine(id)
 				}
 				return m, nil
 			}
@@ -239,21 +229,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.switchToTable()
 				return m, nil
 			}
-
-			/*
-				case "up", "k", "down", "j":
-					// In detail view, navigate through records
-					if m.CurrentScreen == DetailScreen {
-						var cmd tea.Cmd
-						m.TablePane, cmd = m.TablePane.Update(msg)
-						// Load detail for newly selected row
-						id := m.TablePane.GetSelectedID(m.Lines)
-						if id != "" {
-							return m, tea.Sequence(cmd, m.loadDetailData(id))
-						}
-						return m, cmd
-					}
-			*/
 		}
 
 	case tea.WindowSizeMsg:

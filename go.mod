@@ -5,6 +5,7 @@ go 1.25.1
 require (
 	charm.land/bubbletea/v2 v2.0.0-rc.2
 	charm.land/lipgloss/v2 v2.0.0-beta.3.0.20251121225325-f6fbdf23b0ff
+	github.com/clarktrimble/sabot v0.0.7
 	github.com/marcboeker/go-duckdb v1.8.5
 	github.com/pkg/errors v0.9.1
 	gopkg.in/yaml.v3 v3.0.1
