@@ -13,10 +13,11 @@ import (
 // Todo: use uptodate lib from duckdb in main
 
 type Duck struct {
-	db     *sql.DB
-	logger parcours.Logger
-	filter parcours.Filter
-	sorts  []parcours.Sort
+	db       *sql.DB
+	logger   parcours.Logger
+	filter   parcours.Filter
+	sorts    []parcours.Sort
+	filename string
 }
 
 func New(lgr parcours.Logger) (dk *Duck, err error) {
@@ -41,8 +42,14 @@ func (dk *Duck) Close() {
 
 // Load a file
 func (dk *Duck) Load(path string, last int) (err error) {
+	dk.filename = path
 	err = loadDualTable(dk.db, path)
 	return
+}
+
+// Name returns the name of the loaded file
+func (dk *Duck) Name() string {
+	return dk.filename
 }
 
 // Follow a file
@@ -152,8 +159,8 @@ func scanRow(rows *sql.Rows, columnCount int) ([]any, error) {
 	return vals, err
 }
 
-// GetJson returns raw json for a line
-func (dk *Duck) GetJson(id string) (data map[string]any, err error) {
+// GetLine returns raw json for a line
+func (dk *Duck) GetLine(id string) (data map[string]any, err error) {
 
 	query := "SELECT raw FROM logs_raw WHERE id = ?"
 

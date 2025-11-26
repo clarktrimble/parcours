@@ -5,6 +5,8 @@ import (
 )
 
 // Todo: look a delish remote_ip logging, borken with "["?
+// Todo: better nav ijkl and page up/down
+// Todo: full page of lines yeah?
 
 // Logger specifies a contextual, structured logger.
 type Logger interface {
@@ -20,6 +22,8 @@ type Field struct {
 
 // Store specifies a backing datastore.
 type Store interface {
+	// Name returns the name of the data source
+	Name() string
 	// Load a file
 	Load(path string, last int) (err error)
 	// Follow a file
@@ -33,7 +37,7 @@ type Store interface {
 	// GetPage of log lines
 	GetPage(offset, size int) (lines []Line, err error)
 	// GetJson returns raw json for a log line
-	GetJson(id string) (data map[string]any, err error)
+	GetLine(id string) (data map[string]any, err error)
 	// Tail streams log lines
 	Tail(ctx context.Context) (lines <-chan Line, err error)
 }
