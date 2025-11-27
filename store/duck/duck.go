@@ -15,7 +15,7 @@ import (
 type Duck struct {
 	db       *sql.DB
 	logger   parcours.Logger
-	filter   parcours.Filter
+	filter   *parcours.Filter
 	sorts    []parcours.Sort
 	filename string
 }
@@ -30,7 +30,6 @@ func New(lgr parcours.Logger) (dk *Duck, err error) {
 
 	dk = &Duck{
 		db:     db,
-		filter: parcours.Filter{},
 		sorts:  []parcours.Sort{},
 		logger: lgr,
 	}
@@ -71,10 +70,37 @@ func (dk *Duck) Promote(field string) (err error) {
 }
 
 // SetView Filter and Sort(s)
-func (dk *Duck) SetView(filter parcours.Filter, sorts []parcours.Sort) (err error) {
+func (dk *Duck) SetView(filter *parcours.Filter, sorts []parcours.Sort) (err error) {
 	dk.filter = filter
 	dk.sorts = sorts
 	return nil
+}
+
+// buildWhereClause converts a Filter to SQL WHERE clause
+func (dk *Duck) buildWhereClause() string {
+	if dk.filter == nil {
+		return ""
+	}
+
+	switch dk.filter.Op {
+	case parcours.Eq:
+		return fmt.Sprintf("WHERE %s = '%v'", dk.filter.Field, dk.filter.Value)
+	case parcours.Ne:
+		return fmt.Sprintf("WHERE %s != '%v'", dk.filter.Field, dk.filter.Value)
+	case parcours.Gt:
+		return fmt.Sprintf("WHERE %s > %v", dk.filter.Field, dk.filter.Value)
+	case parcours.Gte:
+		return fmt.Sprintf("WHERE %s >= %v", dk.filter.Field, dk.filter.Value)
+	case parcours.Lt:
+		return fmt.Sprintf("WHERE %s < %v", dk.filter.Field, dk.filter.Value)
+	case parcours.Lte:
+		return fmt.Sprintf("WHERE %s <= %v", dk.filter.Field, dk.filter.Value)
+	case parcours.Contains:
+		return fmt.Sprintf("WHERE %s LIKE '%%%v%%'", dk.filter.Field, dk.filter.Value)
+	// TODO: handle And, Or, Not, Match
+	default:
+		return ""
+	}
 }
 
 // GetView fields and count
@@ -94,8 +120,10 @@ func (dk *Duck) GetView() (fields []parcours.Field, count int, err error) {
 		}
 	}
 
-	// Get count (TODO: apply filter)
-	err = dk.db.QueryRow("SELECT COUNT(*) FROM logs").Scan(&count)
+	// Get count with filter
+	whereClause := dk.buildWhereClause()
+	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM logs %s", whereClause)
+	err = dk.db.QueryRow(countQuery).Scan(&count)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to count logs")
 		return nil, 0, err
@@ -107,9 +135,9 @@ func (dk *Duck) GetView() (fields []parcours.Field, count int, err error) {
 // GetPage of log lines
 func (dk *Duck) GetPage(offset, size int) (lines []parcours.Line, err error) {
 
-	// Todo: apply filter and sort
-
-	query := fmt.Sprintf("SELECT * FROM logs LIMIT %d OFFSET %d", size, offset)
+	// Apply filter (TODO: apply sort)
+	whereClause := dk.buildWhereClause()
+	query := fmt.Sprintf("SELECT * FROM logs %s LIMIT %d OFFSET %d", whereClause, size, offset)
 
 	rows, err := dk.db.Query(query)
 	if err != nil {

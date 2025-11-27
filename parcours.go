@@ -31,7 +31,7 @@ type Store interface {
 	// Promote a field
 	Promote(field string) (err error)
 	//SetView Filter and Sort(s)
-	SetView(filter Filter, sorts []Sort) (err error)
+	SetView(filter *Filter, sorts []Sort) (err error)
 	// GetView fields and count
 	GetView() (fields []Field, count int, err error)
 	// GetPage of log lines

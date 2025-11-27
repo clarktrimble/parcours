@@ -63,6 +63,12 @@ func NewModel(ctx context.Context, store Store, lgr Logger) (model Model, err er
 		}
 	}
 
+	// Apply filter from layout (SetView handles nil)
+	err = store.SetView(layout.Filter, nil)
+	if err != nil {
+		return
+	}
+
 	model = Model{
 		Store:         store,
 		Layout:        layout,

@@ -8,6 +8,7 @@ import (
 
 type Layout struct {
 	Columns []Column `yaml:"columns"`
+	Filter  *Filter  `yaml:"filter,omitempty"`
 }
 
 func LoadLayout(path string) (*Layout, error) {

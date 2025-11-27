@@ -1,3 +1,8 @@
+filter:
+  op: 3  # Eq
+  field: level
+  value: error
+
 columns:
   - field: timestamp
     width: 14
@@ -31,3 +36,5 @@ columns:
   - field: body
     demote: true
     json: true
+
+# Todo: pluralize field(s)
