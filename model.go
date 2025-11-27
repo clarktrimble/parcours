@@ -1,6 +1,7 @@
 package parcours
 
 import (
+	"context"
 	"encoding/json"
 
 	tea "charm.land/bubbletea/v2"
@@ -13,9 +14,11 @@ const (
 
 // Model is the bubbletea model for the log viewer TUI.
 type Model struct {
-	Store  Store
-	Layout *Layout
-	logger Logger
+	Store       Store
+	Layout      *Layout
+	logger      Logger
+	ctx         context.Context
+	errorString string
 
 	// Current screen
 	CurrentScreen Screen
@@ -36,7 +39,7 @@ type Model struct {
 }
 
 // NewModel creates a new TUI model with the given store.
-func NewModel(store Store, lgr Logger) (model Model, err error) {
+func NewModel(ctx context.Context, store Store, lgr Logger) (model Model, err error) {
 
 	layout, err := LoadLayout("layout.yaml")
 	if err != nil {
@@ -44,7 +47,6 @@ func NewModel(store Store, lgr Logger) (model Model, err error) {
 	}
 
 	// Promote fields from layout
-	// TODO: improve error handling/logging so we can see promotion failures
 	for _, col := range layout.Columns {
 
 		if col.Demote {
@@ -66,7 +68,7 @@ func NewModel(store Store, lgr Logger) (model Model, err error) {
 		Layout:        layout,
 		logger:        lgr,
 		CurrentScreen: TableScreen,
-		TablePane:     NewTablePane(),
+		TablePane:     NewTablePane(layout),
 		DetailPane:    NewDetailPane(),
 	}
 
@@ -75,40 +77,6 @@ func NewModel(store Store, lgr Logger) (model Model, err error) {
 
 func (m Model) Init() tea.Cmd {
 	return nil
-}
-
-// getPage loads a page of data from the store
-func (m Model) getPage(offset, size int) tea.Cmd {
-	return func() tea.Msg {
-		fields, count, err := m.Store.GetView()
-		if err != nil {
-			return pageMsg{err: err}
-		}
-
-		lines, err := m.Store.GetPage(offset, size)
-		if err != nil {
-			return pageMsg{err: err}
-		}
-
-		return pageMsg{
-			fields: fields,
-			lines:  lines,
-			count:  count,
-		}
-	}
-}
-
-// getLine loads a full record from the store
-func (m Model) getLine(id string) tea.Cmd {
-	return func() tea.Msg {
-		data, err := m.Store.GetLine(id)
-		if err != nil {
-			return lineMsg{err: err}
-		}
-
-		parsed := parseJsonFields(data, m.Layout)
-		return lineMsg{data: parsed}
-	}
 }
 
 // parseJsonFields parses JSON-escaped strings in configured fields
@@ -152,28 +120,11 @@ func parseJsonFields(data map[string]any, layout *Layout) map[string]any {
 	return data
 }
 
-// switchToTable switches to the table screen and manages focus
-func (m *Model) switchToTable() {
-	m.CurrentScreen = TableScreen
-	m.TablePane.Focused = true
-	m.DetailPane.Focused = false
-}
-
-// switchToDetail switches to the detail screen and manages focus
-func (m *Model) switchToDetail() {
-	m.CurrentScreen = DetailScreen
-	m.TablePane.Focused = false
-	m.DetailPane.Focused = true
-}
-
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
+
 	case pageMsg:
-		if msg.err != nil {
-			// TODO: handle error
-			return m, nil
-		}
 		m.Fields = msg.fields
 		m.Lines = msg.lines
 		m.TotalLines = msg.count
@@ -183,51 +134,44 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case lineMsg:
-		if msg.err != nil {
-			// TODO: handle error - maybe show error in detail view
-			m.FullRecord = map[string]any{"error": msg.err.Error()}
-			return m, nil
-		}
 		m.FullRecord = msg.data
 		return m, nil
 
 	case getPageMsg:
-		// TablePane scrolled and needs new data
-		return m, m.getPage(msg.Offset, msg.Size)
+		// Todo: msg relay, can we make do with in or out?
+		return m, m.getPage(msg.offset, msg.size)
+
+	case errorMsg:
+		m.logger.Error(m.ctx, "error msg", msg.err)
+		m.errorString = msg.err.Error()
+		//m = m.ready()
+		//return m.refocus(alert)
+		return m, nil
 
 	case tea.KeyPressMsg:
+		if m.errorString != "" {
+			m.errorString = "" //Todo: find home for clear error
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 
 		case "esc":
 			if m.CurrentScreen != TableScreen {
-				// Esc from detail goes back to table
 				m.switchToTable()
 				return m, nil
 			}
-			// Esc from table quits
 			return m, tea.Quit
 
 		case "right", "l":
-			// Navigate right: table → detail
 			if m.CurrentScreen == TableScreen {
-				m.switchToDetail()
-				// Reset detail scroll when entering
-				m.DetailPane.ScrollOffset = 0
-				// Load detail for currently selected row
-				id := m.TablePane.GetSelectedID(m.Lines)
-				if id != "" {
-					return m, m.getLine(id)
-				}
-				return m, nil
+				return m, m.switchToDetail()
 			}
 
 		case "left", "h":
-			// Navigate left: detail → table
 			if m.CurrentScreen == DetailScreen {
-				m.switchToTable()
-				return m, nil
+				return m, m.switchToTable()
 			}
 		}
 
@@ -239,6 +183,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Width:  msg.Width,
 			Height: msg.Height - footerHeight,
 		}
+		// Todo: just loop these thru again?? (just below)
 		var cmd1, cmd2 tea.Cmd
 		m.TablePane, cmd1 = m.TablePane.Update(adjustedMsg)
 		m.DetailPane, cmd2 = m.DetailPane.Update(adjustedMsg)
@@ -247,6 +192,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Broadcast to all child components
+	// Todo: icanhaz slice of interface?
 	var cmd1, cmd2 tea.Cmd
 	m.TablePane, cmd1 = m.TablePane.Update(msg)
 	m.DetailPane, cmd2 = m.DetailPane.Update(msg)
@@ -254,7 +200,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() tea.View {
-	if m.Width == 0 {
+	if m.Width == 0 { // Todo: use m.intialized
 		return tea.NewView("Loading...")
 	}
 
@@ -266,7 +212,7 @@ func (m Model) View() tea.View {
 	case TableScreen:
 		screenContent = m.TablePane.Render(m.Fields, m.Lines, m.Layout)
 	default:
-		screenContent = "Unknown screen"
+		screenContent = "Unknown screen" // Todo: error plz
 	}
 
 	// Create screen layer at origin (0, 0)
@@ -276,6 +222,9 @@ func (m Model) View() tea.View {
 	current := m.TablePane.ScrollOffset + m.TablePane.SelectedRow + 1
 	total := m.TablePane.TotalLines
 	footerContent := RenderFooter(current, total, m.Store.Name(), m.Width)
+	if m.errorString != "" {
+		footerContent = m.errorString // Todo: find a home for error string
+	}
 	footerLayer := lipgloss.NewLayer("footer", footerContent).Y(m.Height - footerHeight)
 
 	// Compose layers on canvas
@@ -283,7 +232,7 @@ func (m Model) View() tea.View {
 	canvas.Compose(screenLayer)
 	canvas.Compose(footerLayer)
 
-	v := tea.NewView(canvas)
-	v.AltScreen = true
-	return v
+	view := tea.NewView(canvas)
+	view.AltScreen = true
+	return view
 }

@@ -1,15 +1,24 @@
 package parcours
 
-// pageMsg contains loaded page data
+// pageMsg contains a page of lines and their fields
 type pageMsg struct {
 	fields []Field
 	lines  []Line
 	count  int
-	err    error
 }
 
-// lineMsg contains loaded detail record data
+// lineMsg contains a full line
 type lineMsg struct {
 	data map[string]any
-	err  error
+}
+
+// errorMsg contains an error
+type errorMsg struct {
+	err error
+}
+
+// getPageMsg signals to load a page of lines
+type getPageMsg struct {
+	offset int
+	size   int
 }

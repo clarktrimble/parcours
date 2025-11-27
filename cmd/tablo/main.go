@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 
 	tea "charm.land/bubbletea/v2"
@@ -27,7 +28,7 @@ func main() {
 	file := util.OpenLog(logFile, mode)
 
 	lgr := logCfg.New(file)
-	//ctx := context.Background()
+	ctx := context.Background()
 
 	// load cfg
 
@@ -67,12 +68,12 @@ func main() {
 		panic(err)
 	}
 
-	err = dk.SetView(parcours.Filter{}, nil)
-	if err != nil {
-		panic(err)
-	}
+	//err = dk.SetView(parcours.Filter{}, nil)
+	//if err != nil {
+	//panic(err)
+	//}
 
-	model, err := parcours.NewModel(dk, lgr)
+	model, err := parcours.NewModel(ctx, dk, lgr)
 	if err != nil {
 		panic(err)
 	}

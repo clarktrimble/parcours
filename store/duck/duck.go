@@ -30,6 +30,8 @@ func New(lgr parcours.Logger) (dk *Duck, err error) {
 
 	dk = &Duck{
 		db:     db,
+		filter: parcours.Filter{},
+		sorts:  []parcours.Sort{},
 		logger: lgr,
 	}
 

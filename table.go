@@ -5,41 +5,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2/table"
 )
-
-func RenderTable(t *table.Table, fields []Field, lines []Line, selectedRow, width int, layout *Layout) string {
-	// Build field lookup map
-	fieldIndex := make(map[string]int)
-	for i, f := range fields {
-		fieldIndex[f.Name] = i
-	}
-
-	// Clear existing rows and add new data
-	t.ClearRows()
-
-	// Add data rows
-	for _, line := range lines {
-		var row []string
-		for _, col := range layout.Columns {
-			if col.Hidden || col.Demote {
-				continue
-			}
-
-			// Get field and format value
-			field := fields[fieldIndex[col.Field]]
-			idx := fieldIndex[col.Field]
-			formatted := formatValue(line[idx], field.Type, col.Format)
-
-			// Pad/truncate to exact width
-			padded := fmt.Sprintf("%-*.*s", col.Width, col.Width, formatted)
-			row = append(row, padded)
-		}
-		t.Row(row...)
-	}
-
-	return t.Render()
-}
 
 // RenderFooter renders a footer with metadata about the table.
 func RenderFooter(current, total int, filename string, width int) string {
