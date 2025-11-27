@@ -9,6 +9,10 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Todo: handle cell overflow
+// Todo: cell selection
+// Tood: handle columns overflow
+
 const (
 	headerHeight = 2
 )
@@ -16,9 +20,9 @@ const (
 // TablePane handles the table view display and navigation state
 type TablePane struct {
 	// Navigation state
-	SelectedLine int  // Absolute line position (0 to TotalLines-1)
-	ScrollOffset int  // Line at top of viewport
-	TotalLines   int  // Total lines available (set by parent)
+	SelectedLine int // Absolute line position (0 to TotalLines-1)
+	ScrollOffset int // Line at top of viewport
+	TotalLines   int // Total lines available (set by parent)
 	Width        int
 	Height       int
 	Focused      bool
@@ -42,13 +46,14 @@ func NewTablePane(layout *Layout) *TablePane {
 
 	lgt := table.New()
 
-	// Set headers
+	// Set headers (padded to width+1 for spacing)
 	var headers []string
 	for _, col := range layout.Columns {
 		if col.Hidden || col.Demote {
 			continue
 		}
-		headers = append(headers, col.Field)
+		padded := fmt.Sprintf("%-*s", col.Width+1, col.Field)
+		headers = append(headers, padded)
 	}
 	lgt.Headers(headers...)
 
@@ -204,9 +209,16 @@ func (m *TablePane) Render(fields []Field, lines []Line, layout *Layout) string 
 			idx := fieldIndex[col.Field]
 			formatted := formatValue(line[idx], field.Type, col.Format)
 
-			// Pad/truncate to exact width
-			padded := fmt.Sprintf("%-*.*s", col.Width, col.Width, formatted)
-			row = append(row, padded)
+			// Pad to width+1 (adds spacing), truncate to width if needed
+			var value string
+			if len(formatted) > col.Width {
+				truncated := formatted[:col.Width-1]
+				ellipsis := lipgloss.NewStyle().Foreground(lipgloss.Color("248")).Render("…")
+				value = fmt.Sprintf("%-*s", col.Width+1, truncated+ellipsis)
+			} else {
+				value = fmt.Sprintf("%-*s", col.Width+1, formatted)
+			}
+			row = append(row, value)
 		}
 		m.table.Row(row...)
 	}
