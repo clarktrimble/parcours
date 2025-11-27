@@ -15,18 +15,27 @@ const (
 
 // TablePane handles the table view display and navigation state
 type TablePane struct {
-	// Display state
-	ScrollOffset int
-	SelectedRow  int
+	// Navigation state
+	SelectedLine int  // Absolute line position (0 to TotalLines-1)
+	ScrollOffset int  // Line at top of viewport
+	TotalLines   int  // Total lines available (set by parent)
 	Width        int
 	Height       int
 	Focused      bool
-	CurrentLines int  // Number of lines currently loaded
-	TotalLines   int  // Total lines available (set by parent)
 	initialized  bool // Whether initial data has been requested
 
 	layout *Layout
 	table  *table.Table
+}
+
+// pageSize returns the number of rows that fit on screen
+func (m *TablePane) pageSize() int {
+	return m.Height - headerHeight
+}
+
+// selectedRow returns the row position within the current page
+func (m *TablePane) selectedRow() int {
+	return m.SelectedLine - m.ScrollOffset
 }
 
 func NewTablePane(layout *Layout) *TablePane {
@@ -72,34 +81,52 @@ func (m *TablePane) Update(msg tea.Msg) (*TablePane, tea.Cmd) {
 			return m, nil
 		}
 
+		oldScrollOffset := m.ScrollOffset
+		pageSize := m.pageSize()
+
 		switch msg.String() {
 		case "up", "k":
-			if m.SelectedRow > 0 {
-				m.SelectedRow--
-			} else if m.ScrollOffset > 0 {
-				m.ScrollOffset--
-				// Signal parent to load new page
-				pageSize := m.Height - headerHeight
-				return m, func() tea.Msg {
-					return getPageMsg{
-						offset: m.ScrollOffset,
-						size:   pageSize,
-					}
-				}
+			if m.SelectedLine > 0 {
+				m.SelectedLine--
 			}
 
 		case "down", "j":
-			if m.SelectedRow < m.CurrentLines-1 {
-				m.SelectedRow++
-			} else if m.ScrollOffset+m.CurrentLines < m.TotalLines {
-				m.ScrollOffset++
-				// Signal parent to load new page
-				pageSize := m.Height - headerHeight
-				return m, func() tea.Msg {
-					return getPageMsg{
-						offset: m.ScrollOffset,
-						size:   pageSize,
-					}
+			if m.SelectedLine < m.TotalLines-1 {
+				m.SelectedLine++
+			}
+
+		case "pgup", "ctrl+u":
+			m.SelectedLine -= pageSize
+			if m.SelectedLine < 0 {
+				m.SelectedLine = 0
+			}
+
+		case "pgdown", "ctrl+d":
+			m.SelectedLine += pageSize
+			if m.SelectedLine >= m.TotalLines {
+				m.SelectedLine = m.TotalLines - 1
+			}
+
+		case "g":
+			m.SelectedLine = 0
+
+		case "G":
+			m.SelectedLine = m.TotalLines - 1
+		}
+
+		// Adjust ScrollOffset to keep SelectedLine visible
+		if m.SelectedLine < m.ScrollOffset {
+			m.ScrollOffset = m.SelectedLine
+		} else if m.SelectedLine >= m.ScrollOffset+pageSize {
+			m.ScrollOffset = m.SelectedLine - pageSize + 1
+		}
+
+		// If we've scrolled to a different page, request new data
+		if m.ScrollOffset != oldScrollOffset {
+			return m, func() tea.Msg {
+				return getPageMsg{
+					offset: m.ScrollOffset,
+					size:   pageSize,
 				}
 			}
 		}
@@ -111,7 +138,7 @@ func (m *TablePane) Update(msg tea.Msg) (*TablePane, tea.Cmd) {
 		// Request initial data load when we first get dimensions
 		if !m.initialized && m.Height > 0 {
 			m.initialized = true
-			pageSize := m.Height - headerHeight
+			pageSize := m.pageSize()
 			if pageSize > 0 {
 				return m, func() tea.Msg {
 					return getPageMsg{
@@ -128,13 +155,14 @@ func (m *TablePane) Update(msg tea.Msg) (*TablePane, tea.Cmd) {
 
 // SelectedId returns the id of the currently selected line
 func (m *TablePane) SelectedId(lines []Line) (id string, err error) {
+	selectedRow := m.selectedRow()
 
-	if len(lines) == 0 || m.SelectedRow >= len(lines) {
-		err = errors.Errorf("index %d is out of bounds of %d lines", m.SelectedRow, len(lines))
+	if len(lines) == 0 || selectedRow >= len(lines) {
+		err = errors.Errorf("index %d is out of bounds of %d lines", selectedRow, len(lines))
 		return
 	}
 
-	id = lines[m.SelectedRow][0].String() //Todo: add Id() method to Line?
+	id = lines[selectedRow][0].String() //Todo: add Id() method to Line?
 	return
 }
 
@@ -147,9 +175,10 @@ func (m *TablePane) Render(fields []Field, lines []Line, layout *Layout) string 
 	}
 
 	// setup style func and field index
+	selectedRow := m.selectedRow()
 
 	m.table.StyleFunc(func(row, col int) lipgloss.Style {
-		if row == m.SelectedRow {
+		if row == selectedRow {
 			return lipgloss.NewStyle().Background(lipgloss.Color("63"))
 		}
 		return lipgloss.NewStyle()

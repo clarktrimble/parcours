@@ -128,8 +128,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Fields = msg.fields
 		m.Lines = msg.lines
 		m.TotalLines = msg.count
-		// Update TablePane's line counts
-		m.TablePane.CurrentLines = len(msg.lines)
 		m.TablePane.TotalLines = msg.count
 		return m, nil
 
@@ -219,7 +217,7 @@ func (m Model) View() tea.View {
 	screenLayer := lipgloss.NewLayer("screen", screenContent)
 
 	// Create footer content and layer positioned at bottom
-	current := m.TablePane.ScrollOffset + m.TablePane.SelectedRow + 1
+	current := m.TablePane.SelectedLine + 1
 	total := m.TablePane.TotalLines
 	footerContent := RenderFooter(current, total, m.Store.Name(), m.Width)
 	if m.errorString != "" {
