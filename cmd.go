@@ -81,8 +81,15 @@ func (m Model) reloadColumns() (Model, tea.Cmd) {
 		return m, errorCmd(err)
 	}
 
+	// Get updated fields after promotion
+	fields, _, err := m.Store.GetView()
+	if err != nil {
+		return m, errorCmd(err)
+	}
+
 	m.Layout = layout
-	m.TablePane.SetLayout(layout)
+	m.Lines = nil // Clear old lines to avoid render mismatch
+	m.TablePane.SetColumns(layout.Columns, fields)
 
 	return m, m.getPage(m.TablePane.ScrollOffset, m.TablePane.pageSize())
 }
@@ -99,7 +106,15 @@ func (m Model) reloadFilter() (Model, tea.Cmd) {
 		return m, errorCmd(err)
 	}
 
+	// Get updated count after filter change
+	_, count, err := m.Store.GetView()
+	if err != nil {
+		return m, errorCmd(err)
+	}
+
 	m.Layout = layout
+	m.Lines = nil // Clear old lines to avoid render mismatch
+	m.TablePane.TotalLines = count
 	m.TablePane.SelectedLine = 0
 	m.TablePane.ScrollOffset = 0
 

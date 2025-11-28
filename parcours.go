@@ -21,6 +21,7 @@ type Field struct {
 }
 
 // Store specifies a backing datastore.
+// Todo: rename Get/Set View
 type Store interface {
 	// Name returns the name of the data source
 	Name() string

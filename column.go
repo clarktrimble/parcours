@@ -7,4 +7,8 @@ type Column struct {
 	Hidden bool   `yaml:"hidden,omitempty"`
 	Demote bool   `yaml:"demote,omitempty"`
 	Json   bool   `yaml:"json,omitempty"`
+
+	// Resolved at layout time:
+	fieldIdx  int
+	formatter func(Value) string
 }

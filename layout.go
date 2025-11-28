@@ -26,6 +26,7 @@ func LoadLayout(path string) (*Layout, error) {
 }
 
 // promote promotes fields in layout
+// Todo: cols not layout here yeah?
 func (layout *Layout) promote(store Store) (err error) {
 
 	fields, _, err := store.GetView()

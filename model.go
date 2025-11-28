@@ -15,7 +15,7 @@ const (
 // Model is the bubbletea model for the log viewer TUI.
 type Model struct {
 	Store       Store
-	Layout      *Layout
+	Layout      *Layout // Todo: obviate?
 	logger      Logger
 	ctx         context.Context
 	errorString string
@@ -24,9 +24,7 @@ type Model struct {
 	CurrentScreen Screen
 
 	// Data (loaded from Store)
-	Fields     []Field
 	Lines      []Line
-	TotalLines int
 	FullRecord map[string]any
 
 	// Child panes (display state only)
@@ -58,12 +56,18 @@ func NewModel(ctx context.Context, store Store, lgr Logger) (model Model, err er
 		return
 	}
 
+	// Get fields from store
+	fields, count, err := store.GetView()
+	if err != nil {
+		return
+	}
+
 	model = Model{
 		Store:         store,
 		Layout:        layout,
 		logger:        lgr,
 		CurrentScreen: TableScreen,
-		TablePane:     NewTablePane(layout),
+		TablePane:     NewTablePane(layout.Columns, fields, count),
 		DetailPane:    NewDetailPane(),
 	}
 
@@ -120,9 +124,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case pageMsg:
-		m.Fields = msg.fields
 		m.Lines = msg.lines
-		m.TotalLines = msg.count
 		m.TablePane.TotalLines = msg.count
 		return m, nil
 
@@ -210,7 +212,7 @@ func (m Model) View() tea.View {
 	case DetailScreen:
 		screenContent = m.DetailPane.Render(m.FullRecord)
 	case TableScreen:
-		screenContent = m.TablePane.Render(m.Fields, m.Lines)
+		screenContent = m.TablePane.Render(m.Lines)
 	default:
 		screenContent = "Unknown screen" // Todo: error plz
 	}

@@ -30,8 +30,8 @@ type TablePane struct {
 	Focused      bool
 	initialized  bool // Whether initial data has been requested
 
-	layout *Layout
-	table  *table.Table
+	columns []Column
+	table   *table.Table
 }
 
 // pageSize returns the number of rows that fit on screen
@@ -44,28 +44,46 @@ func (m *TablePane) selectedRow() int {
 	return m.SelectedLine - m.ScrollOffset
 }
 
-func NewTablePane(layout *Layout) *TablePane {
+func NewTablePane(columns []Column, fields []Field, count int) *TablePane {
 
 	lgt := table.New()
 	styleTable(lgt)
 
 	tablePane := &TablePane{
-		Focused: true, // Start with table focused // Todo: elsewhere
-		table:   lgt,
-		layout:  layout,
+		Focused:    true, // Start with table focused // Todo: elsewhere
+		table:      lgt,
+		TotalLines: count,
 	}
 
-	tablePane.SetLayout(layout)
+	tablePane.SetColumns(columns, fields)
+
 	return tablePane
 }
 
-func (m *TablePane) SetLayout(layout *Layout) {
+func (m *TablePane) SetColumns(columns []Column, fields []Field) {
 
-	m.layout = layout
+	m.columns = columns
+
+	// Build field index
+	idxByName := map[string]int{}
+	for i, field := range fields {
+		idxByName[field.Name] = i
+	}
+
+	// Resolve each column against fields
+	for i := range columns {
+		col := &columns[i]
+
+		idx := idxByName[col.Field]
+		field := fields[idx]
+
+		col.fieldIdx = idx
+		col.formatter = makeFormatter(field.Type, col.Format)
+	}
 
 	// Set headers (padded to width+1 for spacing)
 	var headers []string
-	for _, col := range layout.Columns {
+	for _, col := range m.columns {
 		if col.Hidden || col.Demote {
 			continue
 		}
@@ -169,7 +187,7 @@ func (m *TablePane) SelectedId(lines []Line) (id string, err error) {
 }
 
 // Render renders the table with the given data
-func (m *TablePane) Render(fields []Field, lines []Line) string {
+func (m *TablePane) Render(lines []Line) string {
 
 	// Todo: elsewhere and use initialized
 	if m.Width == 0 {
@@ -186,27 +204,17 @@ func (m *TablePane) Render(fields []Field, lines []Line) string {
 		return unStyle
 	})
 
-	// build idx lookup
-
-	idxByName := map[string]int{}
-	for i, field := range fields {
-		idxByName[field.Name] = i
-	}
-
 	// repopulate table
 
 	m.table.ClearRows()
 	for _, line := range lines {
 		var row []string
-		for _, col := range m.layout.Columns {
+		for _, col := range m.columns {
 			if col.Hidden || col.Demote {
 				continue
 			}
 
-			// Get field and format value
-			field := fields[idxByName[col.Field]]
-			idx := idxByName[col.Field] // Todo: check ok and error
-			formatted := formatValue(line[idx], field.Type, col.Format)
+			formatted := col.formatter(line[col.fieldIdx]) // Todo: dont crash
 			row = append(row, truncate(formatted, col.Width))
 		}
 		m.table.Row(row...)
@@ -217,15 +225,20 @@ func (m *TablePane) Render(fields []Field, lines []Line) string {
 
 // help
 
-func formatValue(val Value, fieldType, format string) string {
-
-	if format != "" && fieldType == "TIMESTAMP" { // Todo: normalize TIMESTAMP in duck
-		t, err := val.Time()
-		if err == nil {
-			return t.Format(format)
+func makeFormatter(fieldType, format string) func(Value) string {
+	if format != "" && fieldType == "TIMESTAMP" {
+		return func(v Value) string {
+			t, err := v.Time()
+			if err == nil {
+				return t.Format(format)
+			}
+			return v.String()
 		}
 	}
-	return val.String()
+
+	return func(v Value) string {
+		return v.String()
+	}
 }
 
 func truncate(in string, width int) string {
