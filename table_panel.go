@@ -19,8 +19,8 @@ const (
 	headerHeight = 2
 )
 
-// TablePane handles the table view display and navigation state
-type TablePane struct {
+// TablePanel handles the table view display and navigation state
+type TablePanel struct {
 	// Navigation state
 	SelectedLine int // Absolute line position (0 to TotalLines-1)
 	ScrollOffset int // Line at top of viewport
@@ -35,21 +35,21 @@ type TablePane struct {
 }
 
 // pageSize returns the number of rows that fit on screen
-func (m *TablePane) pageSize() int {
+func (m *TablePanel) pageSize() int {
 	return m.Height - headerHeight
 }
 
 // selectedRow returns the row position within the current page
-func (m *TablePane) selectedRow() int {
+func (m *TablePanel) selectedRow() int {
 	return m.SelectedLine - m.ScrollOffset
 }
 
-func NewTablePane(columns []Column, fields []Field, count int) *TablePane {
+func NewTablePanel(columns []Column, fields []Field, count int) *TablePanel {
 
 	lgt := table.New()
 	styleTable(lgt)
 
-	tablePane := &TablePane{
+	tablePane := &TablePanel{
 		Focused:    true, // Start with table focused // Todo: elsewhere
 		table:      lgt,
 		TotalLines: count,
@@ -60,7 +60,7 @@ func NewTablePane(columns []Column, fields []Field, count int) *TablePane {
 	return tablePane
 }
 
-func (m *TablePane) SetColumns(columns []Column, fields []Field) {
+func (m *TablePanel) SetColumns(columns []Column, fields []Field) {
 
 	m.columns = columns
 
@@ -93,7 +93,7 @@ func (m *TablePane) SetColumns(columns []Column, fields []Field) {
 	m.table.Headers(headers...)
 }
 
-func (m *TablePane) Update(msg tea.Msg) (*TablePane, tea.Cmd) {
+func (m *TablePanel) Update(msg tea.Msg) (*TablePanel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		// Only handle keys when focused
@@ -174,7 +174,7 @@ func (m *TablePane) Update(msg tea.Msg) (*TablePane, tea.Cmd) {
 }
 
 // SelectedId returns the id of the currently selected line
-func (m *TablePane) SelectedId(lines []Line) (id string, err error) {
+func (m *TablePanel) SelectedId(lines []Line) (id string, err error) {
 	selectedRow := m.selectedRow()
 
 	if len(lines) == 0 || selectedRow >= len(lines) {
@@ -187,7 +187,7 @@ func (m *TablePane) SelectedId(lines []Line) (id string, err error) {
 }
 
 // Render renders the table with the given data
-func (m *TablePane) Render(lines []Line) string {
+func (m *TablePanel) Render(lines []Line) string {
 
 	// Todo: elsewhere and use initialized
 	if m.Width == 0 {

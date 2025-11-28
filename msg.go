@@ -8,8 +8,9 @@ type pageMsg struct {
 }
 
 // lineMsg contains a full line
+// Todo: disambiguate line from lines above
 type lineMsg struct {
-	data map[string]any
+	line map[string]any
 }
 
 // errorMsg contains an error

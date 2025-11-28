@@ -1,8 +1,9 @@
 package parcours
 
+// Todo: deal with blank line at bottom of app
+
 import (
 	"context"
-	"encoding/json"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -20,23 +21,18 @@ type Model struct {
 	ctx         context.Context
 	errorString string
 
-	// Current screen
 	CurrentScreen Screen
 
-	// Data (loaded from Store)
-	Lines      []Line
-	FullRecord map[string]any
+	Lines []Line
 
-	// Child panes (display state only)
-	TablePane  *TablePane
-	DetailPane *DetailPane
+	TablePanel  *TablePanel
+	DetailPanel *DetailPanel
 
-	// Terminal dimensions
 	Width  int
 	Height int
 }
 
-// NewModel creates a new TUI model with the given store.
+// NewModel creates a new bt model.
 func NewModel(ctx context.Context, store Store, lgr Logger) (model Model, err error) {
 
 	layout, err := LoadLayout("layout.yaml")
@@ -67,8 +63,8 @@ func NewModel(ctx context.Context, store Store, lgr Logger) (model Model, err er
 		Layout:        layout,
 		logger:        lgr,
 		CurrentScreen: TableScreen,
-		TablePane:     NewTablePane(layout.Columns, fields, count),
-		DetailPane:    NewDetailPane(),
+		TablePanel:    NewTablePanel(layout.Columns, fields, count),
+		DetailPanel:   NewDetailPanel(layout.Columns),
 	}
 
 	return
@@ -78,58 +74,13 @@ func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-// parseJsonFields parses JSON-escaped strings in configured fields
-// Note: mutates data map in place
-func parseJsonFields(data map[string]any, layout *Layout) map[string]any {
-	// Build map of fields that should be parsed
-	jsonFields := make(map[string]bool)
-	for _, col := range layout.Columns {
-		if col.Json {
-			jsonFields[col.Field] = true
-		}
-	}
-
-	// Loop over actual data fields
-	for key, val := range data {
-		// Skip if not configured for JSON parsing
-		if !jsonFields[key] {
-			continue
-		}
-
-		// Check if field is a string
-		str, ok := val.(string)
-		if !ok {
-			continue
-		}
-
-		// Skip empty strings
-		if str == "" {
-			continue
-		}
-
-		// Try to parse as JSON
-		var parsed any
-		err := json.Unmarshal([]byte(str), &parsed)
-		if err == nil {
-			data[key] = parsed
-		}
-		// If parsing fails, keep original string value
-	}
-
-	return data
-}
-
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 
 	case pageMsg:
 		m.Lines = msg.lines
-		m.TablePane.TotalLines = msg.count
-		return m, nil
-
-	case lineMsg:
-		m.FullRecord = msg.data
+		m.TablePanel.TotalLines = msg.count
 		return m, nil
 
 	case getPageMsg:
@@ -187,8 +138,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Todo: just loop these thru again?? (just below)
 		var cmd1, cmd2 tea.Cmd
-		m.TablePane, cmd1 = m.TablePane.Update(adjustedMsg)
-		m.DetailPane, cmd2 = m.DetailPane.Update(adjustedMsg)
+		m.TablePanel, cmd1 = m.TablePanel.Update(adjustedMsg)
+		m.DetailPanel, cmd2 = m.DetailPanel.Update(adjustedMsg)
 
 		return m, tea.Sequence(cmd1, cmd2)
 	}
@@ -196,8 +147,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Broadcast to all child components
 	// Todo: icanhaz slice of interface?
 	var cmd1, cmd2 tea.Cmd
-	m.TablePane, cmd1 = m.TablePane.Update(msg)
-	m.DetailPane, cmd2 = m.DetailPane.Update(msg)
+	m.TablePanel, cmd1 = m.TablePanel.Update(msg)
+	m.DetailPanel, cmd2 = m.DetailPanel.Update(msg)
 	return m, tea.Sequence(cmd1, cmd2)
 }
 
@@ -206,13 +157,13 @@ func (m Model) View() tea.View {
 		return tea.NewView("Loading...")
 	}
 
-	// Get current screen's content from child panes (pass data to them)
+	// Get current screen's content from child panes
 	var screenContent string
 	switch m.CurrentScreen {
 	case DetailScreen:
-		screenContent = m.DetailPane.Render(m.FullRecord)
+		screenContent = m.DetailPanel.Render()
 	case TableScreen:
-		screenContent = m.TablePane.Render(m.Lines)
+		screenContent = m.TablePanel.Render(m.Lines)
 	default:
 		screenContent = "Unknown screen" // Todo: error plz
 	}
@@ -221,8 +172,8 @@ func (m Model) View() tea.View {
 	screenLayer := lipgloss.NewLayer("screen", screenContent)
 
 	// Create footer content and layer positioned at bottom
-	current := m.TablePane.SelectedLine + 1
-	total := m.TablePane.TotalLines
+	current := m.TablePanel.SelectedLine + 1
+	total := m.TablePanel.TotalLines
 	footerContent := RenderFooter(current, total, m.Store.Name(), m.Width)
 	if m.errorString != "" {
 		footerContent = m.errorString // Todo: find a home for error string

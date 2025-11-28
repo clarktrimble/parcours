@@ -31,23 +31,23 @@ func (m Model) getPage(offset, size int) tea.Cmd {
 }
 
 // getLine loads a full record from the store
+// Todo: this is bucket-brigade?
 func (m Model) getLine(id string) tea.Cmd {
 	return func() tea.Msg {
-		data, err := m.Store.GetLine(id)
+		line, err := m.Store.GetLine(id)
 		if err != nil {
 			return errorMsg{err: err}
 		}
 
-		parsed := parseJsonFields(data, m.Layout)
-		return lineMsg{data: parsed}
+		return lineMsg{line: line}
 	}
 }
 
 // switchToTable switches to the table screen and manages focus
 func (m Model) switchToTable() (Model, tea.Cmd) {
 	m.CurrentScreen = TableScreen
-	m.TablePane.Focused = true
-	m.DetailPane.Focused = false
+	m.TablePanel.Focused = true
+	m.DetailPanel.Focused = false
 
 	return m, nil // honorary cmd here
 }
@@ -55,12 +55,10 @@ func (m Model) switchToTable() (Model, tea.Cmd) {
 // switchToDetail switches to the detail screen and manages focus
 func (m Model) switchToDetail() (Model, tea.Cmd) {
 	m.CurrentScreen = DetailScreen
-	m.TablePane.Focused = false
-	m.DetailPane.Focused = true
+	m.TablePanel.Focused = false
+	m.DetailPanel.Focused = true
 
-	m.DetailPane.ScrollOffset = 0
-
-	id, err := m.TablePane.SelectedId(m.Lines)
+	id, err := m.TablePanel.SelectedId(m.Lines)
 	if err != nil {
 		return m, errorCmd(err)
 	}
@@ -89,9 +87,10 @@ func (m Model) reloadColumns() (Model, tea.Cmd) {
 
 	m.Layout = layout
 	m.Lines = nil // Clear old lines to avoid render mismatch
-	m.TablePane.SetColumns(layout.Columns, fields)
+	m.TablePanel.SetColumns(layout.Columns, fields)
+	m.DetailPanel.SetColumns(layout.Columns)
 
-	return m, m.getPage(m.TablePane.ScrollOffset, m.TablePane.pageSize())
+	return m, m.getPage(m.TablePanel.ScrollOffset, m.TablePanel.pageSize())
 }
 
 // reloadFilter loads layout from file and updates, and resets and gets page
@@ -114,9 +113,9 @@ func (m Model) reloadFilter() (Model, tea.Cmd) {
 
 	m.Layout = layout
 	m.Lines = nil // Clear old lines to avoid render mismatch
-	m.TablePane.TotalLines = count
-	m.TablePane.SelectedLine = 0
-	m.TablePane.ScrollOffset = 0
+	m.TablePanel.TotalLines = count
+	m.TablePanel.SelectedLine = 0
+	m.TablePanel.ScrollOffset = 0
 
-	return m, m.getPage(0, m.TablePane.pageSize())
+	return m, m.getPage(0, m.TablePanel.pageSize())
 }
