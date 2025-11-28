@@ -1,7 +1,7 @@
-filter:
-  op: 3  # Eq
-  field: level
-  value: error
+#filter:
+#  op: 3  # Eq
+#  field: level
+#  value: error
 
 columns:
   - field: timestamp
@@ -23,10 +23,10 @@ columns:
     width: 10
   - field: worker_id
     width: 10
-  - field: app_id
-    width: 8
-  - field: run_id
-    width: 10
+#  - field: app_id
+#    width: 8
+#  - field: run_id
+#    width: 10
   - field: config
     demote: true
     json: true

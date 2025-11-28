@@ -11,7 +11,9 @@ import (
 
 // Todo: handle cell overflow
 // Todo: cell selection
-// Tood: handle columns overflow
+// Todo: handle columns overflow
+// Todo: search
+// Todo: could / should return non-pointer from Update (the elm way)?
 
 const (
 	headerHeight = 2
@@ -45,6 +47,21 @@ func (m *TablePane) selectedRow() int {
 func NewTablePane(layout *Layout) *TablePane {
 
 	lgt := table.New()
+	styleTable(lgt)
+
+	tablePane := &TablePane{
+		Focused: true, // Start with table focused // Todo: elsewhere
+		table:   lgt,
+		layout:  layout,
+	}
+
+	tablePane.SetLayout(layout)
+	return tablePane
+}
+
+func (m *TablePane) SetLayout(layout *Layout) {
+
+	m.layout = layout
 
 	// Set headers (padded to width+1 for spacing)
 	var headers []string
@@ -55,27 +72,7 @@ func NewTablePane(layout *Layout) *TablePane {
 		padded := fmt.Sprintf("%-*s", col.Width+1, col.Field)
 		headers = append(headers, padded)
 	}
-	lgt.Headers(headers...)
-
-	// Configure styling - only separator between header and data
-	lgt.Border(lipgloss.Border{
-		Top:         "─", // Horizontal parts of separator
-		Middle:      "─", // Between columns in separator
-		MiddleLeft:  "─", // Left edge of separator
-		MiddleRight: "─", // Right edge of separator
-	}).
-		BorderTop(false).    // Disable top border
-		BorderBottom(false). // Disable bottom border
-		BorderLeft(false).   // Disable left border
-		BorderRight(false).  // Disable right border
-		BorderColumn(false). // Disable column separators
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("240")))
-
-	return &TablePane{
-		Focused: true, // Start with table focused // Todo: elsewhere
-		table:   lgt,
-		layout:  layout,
-	}
+	m.table.Headers(headers...)
 }
 
 func (m *TablePane) Update(msg tea.Msg) (*TablePane, tea.Cmd) {
@@ -172,26 +169,28 @@ func (m *TablePane) SelectedId(lines []Line) (id string, err error) {
 }
 
 // Render renders the table with the given data
-func (m *TablePane) Render(fields []Field, lines []Line, layout *Layout) string {
+func (m *TablePane) Render(fields []Field, lines []Line) string {
 
 	// Todo: elsewhere and use initialized
 	if m.Width == 0 {
 		return "Loading..."
 	}
 
-	// setup style func and field index
-	selectedRow := m.selectedRow()
+	// style selected
 
+	selectedRow := m.selectedRow()
 	m.table.StyleFunc(func(row, col int) lipgloss.Style {
 		if row == selectedRow {
-			return lipgloss.NewStyle().Background(lipgloss.Color("63"))
+			return hlRowStyle
 		}
-		return lipgloss.NewStyle()
+		return unStyle
 	})
 
-	fieldIndex := make(map[string]int)
-	for i, f := range fields {
-		fieldIndex[f.Name] = i
+	// build idx lookup
+
+	idxByName := map[string]int{}
+	for i, field := range fields {
+		idxByName[field.Name] = i
 	}
 
 	// repopulate table
@@ -205,23 +204,54 @@ func (m *TablePane) Render(fields []Field, lines []Line, layout *Layout) string 
 			}
 
 			// Get field and format value
-			field := fields[fieldIndex[col.Field]]
-			idx := fieldIndex[col.Field]
+			field := fields[idxByName[col.Field]]
+			idx := idxByName[col.Field] // Todo: check ok and error
 			formatted := formatValue(line[idx], field.Type, col.Format)
-
-			// Pad to width+1 (adds spacing), truncate to width if needed
-			var value string
-			if len(formatted) > col.Width {
-				truncated := formatted[:col.Width-1]
-				ellipsis := lipgloss.NewStyle().Foreground(lipgloss.Color("248")).Render("…")
-				value = fmt.Sprintf("%-*s", col.Width+1, truncated+ellipsis)
-			} else {
-				value = fmt.Sprintf("%-*s", col.Width+1, formatted)
-			}
-			row = append(row, value)
+			row = append(row, truncate(formatted, col.Width))
 		}
 		m.table.Row(row...)
 	}
 
 	return m.table.Render()
+}
+
+// help
+
+func formatValue(val Value, fieldType, format string) string {
+
+	if format != "" && fieldType == "TIMESTAMP" { // Todo: normalize TIMESTAMP in duck
+		t, err := val.Time()
+		if err == nil {
+			return t.Format(format)
+		}
+	}
+	return val.String()
+}
+
+func truncate(in string, width int) string {
+
+	if len(in) <= width {
+		return in
+	}
+
+	truncated := in[:width-1]
+	ellipsis := mutedStyle.Render("…")
+	return truncated + ellipsis
+}
+
+func styleTable(tbl *table.Table) {
+
+	tbl.Border(lipgloss.Border{
+		Top:         "─", // Horizontal parts of separator
+		Middle:      "─", // Between columns in separator
+		MiddleLeft:  "─", // Left edge of separator
+		MiddleRight: "─", // Right edge of separator
+	}).
+		BorderTop(false).    // Disable top border
+		BorderBottom(false). // Disable bottom border
+		BorderLeft(false).   // Disable left border
+		BorderRight(false).  // Disable right border
+		BorderColumn(false). // Disable column separators
+		BorderStyle(tableBorderStyle)
+
 }

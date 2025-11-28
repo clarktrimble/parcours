@@ -23,13 +23,3 @@ func RenderFooter(current, total int, filename string, width int) string {
 	footer := style.Render(left + strings.Repeat(" ", padding) + right)
 	return footer
 }
-
-func formatValue(val Value, fieldType, format string) string {
-	// TODO: Duck should normalize field types (TIMESTAMP -> timestamp)
-	if format != "" && fieldType == "TIMESTAMP" {
-		if t, err := val.Time(); err == nil {
-			return t.Format(format)
-		}
-	}
-	return val.String()
-}

@@ -36,22 +36,6 @@ func main() {
 	//cfgErr := util.LoadConfig(cfg, cfgFile)
 	//lgr.Info(ctx, "starting", "cfg", cfg)
 
-	/*
-		// Simple logger that prints to stdout
-		type simpleLogger struct{}
-
-		func (l *simpleLogger) Info(ctx context.Context, msg string, kv ...any) {
-			fmt.Printf("[INFO] %s %v\n", msg, kv)
-		}
-
-		func (l *simpleLogger) Error(ctx context.Context, msg string, err error, kv ...any) {
-			fmt.Printf("[ERROR] %s: %v %v\n", msg, err, kv)
-		}
-
-		func main() {
-
-			logger := &simpleLogger{}
-	*/
 	dk, err := duck.New(lgr)
 	if err != nil {
 		panic(err)

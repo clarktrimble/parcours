@@ -24,3 +24,29 @@ func LoadLayout(path string) (*Layout, error) {
 
 	return &layout, nil
 }
+
+// promote promotes fields in layout
+func (layout *Layout) promote(store Store) (err error) {
+
+	fields, _, err := store.GetView()
+	if err != nil {
+		return
+	}
+
+	promoted := make(map[string]bool)
+	for _, f := range fields {
+		promoted[f.Name] = true
+	}
+
+	for _, col := range layout.Columns {
+		if promoted[col.Field] || col.Demote {
+			continue
+		}
+
+		err = store.Promote(col.Field)
+		if err != nil {
+			return
+		}
+	}
+	return
+}

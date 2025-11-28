@@ -47,20 +47,9 @@ func NewModel(ctx context.Context, store Store, lgr Logger) (model Model, err er
 	}
 
 	// Promote fields from layout
-	for _, col := range layout.Columns {
-
-		if col.Demote {
-			continue
-		}
-		// Todo: fix to allow in impl
-		if col.Field == "timestamp" || col.Field == "message" {
-			continue
-		}
-
-		err = store.Promote(col.Field)
-		if err != nil {
-			return
-		}
+	err = layout.promote(store)
+	if err != nil {
+		return
 	}
 
 	// Apply filter from layout (SetView handles nil)
@@ -163,19 +152,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "esc":
 			if m.CurrentScreen != TableScreen {
-				m.switchToTable()
-				return m, nil
+				return m.switchToTable()
 			}
 			return m, tea.Quit
 
+		case "r":
+			// Reload columns from layout
+			return m.reloadColumns()
+
+		case "f":
+			// Reload filter from layout
+			return m.reloadFilter()
+
 		case "right", "l":
 			if m.CurrentScreen == TableScreen {
-				return m, m.switchToDetail()
+				return m.switchToDetail()
 			}
 
 		case "left", "h":
 			if m.CurrentScreen == DetailScreen {
-				return m, m.switchToTable()
+				return m.switchToTable()
 			}
 		}
 
@@ -214,7 +210,7 @@ func (m Model) View() tea.View {
 	case DetailScreen:
 		screenContent = m.DetailPane.Render(m.FullRecord)
 	case TableScreen:
-		screenContent = m.TablePane.Render(m.Fields, m.Lines, m.Layout)
+		screenContent = m.TablePane.Render(m.Fields, m.Lines)
 	default:
 		screenContent = "Unknown screen" // Todo: error plz
 	}
