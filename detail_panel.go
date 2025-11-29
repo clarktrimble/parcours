@@ -26,19 +26,20 @@ type DetailPanel struct {
 	ScrollOffset int // Line offset for scrolling content
 }
 
-func NewDetailPanel(columns []Column) *DetailPanel {
-	return &DetailPanel{
+func NewDetailPanel(columns []Column) DetailPanel {
+	return DetailPanel{
 		columns: columns,
 	}
 }
 
 // SetColumns updates the columns configuration
-func (m *DetailPanel) SetColumns(columns []Column) {
+func (m DetailPanel) SetColumns(columns []Column) DetailPanel {
 	m.columns = columns
 	// Re-render if we have data
 	if m.line != nil {
 		m.computeContentLines()
 	}
+	return m
 }
 
 // parseJsonFields parses JSON-escaped strings in configured fields
@@ -118,7 +119,7 @@ func (m *DetailPanel) computeContentLines() {
 	m.contentLines = strings.Split(content, "\n")
 }
 
-func (m *DetailPanel) Update(msg tea.Msg) (*DetailPanel, tea.Cmd) {
+func (m DetailPanel) Update(msg tea.Msg) (DetailPanel, tea.Cmd) {
 
 	switch msg := msg.(type) {
 
@@ -160,7 +161,7 @@ func (m *DetailPanel) Update(msg tea.Msg) (*DetailPanel, tea.Cmd) {
 }
 
 // Render renders the detail view (pure - no state mutation)
-func (m *DetailPanel) Render() string {
+func (m DetailPanel) Render() string {
 	if m.contentLines == nil {
 		return "Loading full record..."
 	}

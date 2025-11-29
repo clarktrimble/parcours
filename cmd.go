@@ -88,7 +88,7 @@ func (m Model) reloadColumns() (Model, tea.Cmd) {
 	m.Layout = layout
 	m.Lines = nil // Clear old lines to avoid render mismatch
 	m.TablePanel.SetColumns(layout.Columns, fields)
-	m.DetailPanel.SetColumns(layout.Columns)
+	m.DetailPanel = m.DetailPanel.SetColumns(layout.Columns)
 
 	return m, m.getPage(m.TablePanel.ScrollOffset, m.TablePanel.pageSize())
 }
