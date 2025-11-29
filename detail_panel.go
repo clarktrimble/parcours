@@ -150,9 +150,9 @@ func (pnl DetailPanel) Update(msg tea.Msg) (DetailPanel, tea.Cmd) {
 			// Todo: pageup/down
 		}
 
-	case tea.WindowSizeMsg:
-		pnl.Width = msg.Width
-		pnl.Height = msg.Height
+	case panelSizeMsg:
+		pnl.Width = msg.width
+		pnl.Height = msg.height
 		pnl.ScrollOffset = 0
 		// Todo: better ScrollOffset and may need to recompute contentLines
 	}

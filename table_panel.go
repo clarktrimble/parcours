@@ -13,6 +13,7 @@ import (
 // Todo: cell selection
 // Todo: handle columns overflow
 // Todo: search
+// Todo: extend last column to edge of panel
 
 const (
 	headerHeight = 2
@@ -161,9 +162,9 @@ func (pnl TablePanel) Update(msg tea.Msg) (TablePanel, tea.Cmd) {
 			}
 		}
 
-	case tea.WindowSizeMsg:
-		pnl.Width = msg.Width
-		pnl.Height = msg.Height
+	case panelSizeMsg:
+		pnl.Width = msg.width
+		pnl.Height = msg.height
 
 		// Request data with new page size
 		pageSize := pnl.pageSize()

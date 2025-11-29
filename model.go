@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	footerHeight = 2
+	footerHeight = 1
 )
 
 // Model is the bubbletea model for the log viewer TUI.
@@ -83,7 +83,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Lines = msg.lines
 
 	case getPageMsg:
-		// Todo: msg relay, can we make do with in or out?
 		return m, m.getPage(msg.offset, msg.size)
 
 	case errorMsg:
@@ -134,16 +133,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.initialized = true
 		}
 
-		adjustedMsg := tea.WindowSizeMsg{
-			Width:  msg.Width,
-			Height: msg.Height - footerHeight,
+		// Model is layout manager - compute panel sizes and broadcast via Cmd
+		return m, func() tea.Msg {
+			return panelSizeMsg{
+				width:  msg.Width,
+				height: msg.Height - footerHeight,
+			}
+			// actually calling childrend from Update is idiomatic, prolly??
 		}
-		// Todo: just loop these thru again?? (just below)
-		var cmd1, cmd2 tea.Cmd
-		m.TablePanel, cmd1 = m.TablePanel.Update(adjustedMsg)
-		m.DetailPanel, cmd2 = m.DetailPanel.Update(adjustedMsg)
-
-		return m, tea.Sequence(cmd1, cmd2)
 	}
 
 	// Broadcast to all child components

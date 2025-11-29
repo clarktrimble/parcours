@@ -26,3 +26,9 @@ type getPageMsg struct {
 
 // resetMsg signals to reset table position to start
 type resetMsg struct{}
+
+// panelSizeMsg signals panel size computed by Model's layout manager
+type panelSizeMsg struct {
+	width  int
+	height int
+}

@@ -11,8 +11,8 @@ import (
 func RenderFooter(current, total int, filename string, width int) string {
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
-	left := fmt.Sprintf("%d/%d", current, total)
-	right := filename
+	left := filename
+	right := fmt.Sprintf("%d/%d", current, total)
 
 	// Calculate padding
 	padding := width - lipgloss.Width(left) - lipgloss.Width(right)
