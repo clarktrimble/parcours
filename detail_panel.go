@@ -33,13 +33,13 @@ func NewDetailPanel(columns []Column) DetailPanel {
 }
 
 // SetColumns updates the columns configuration
-func (m DetailPanel) SetColumns(columns []Column) DetailPanel {
-	m.columns = columns
+func (pnl DetailPanel) SetColumns(columns []Column) DetailPanel {
+	pnl.columns = columns
 	// Re-render if we have data
-	if m.line != nil {
-		m.computeContentLines()
+	if pnl.line != nil {
+		pnl.computeContentLines()
 	}
-	return m
+	return pnl
 }
 
 // parseJsonFields parses JSON-escaped strings in configured fields
@@ -88,17 +88,17 @@ func parseJsonFields(data map[string]any, columns []Column) (map[string]any, err
 }
 
 // computeContentLines renders the line data as JSON and splits into lines
-func (m *DetailPanel) computeContentLines() {
+func (pnl *DetailPanel) computeContentLines() {
 
-	if m.line == nil {
-		m.contentLines = nil
+	if pnl.line == nil {
+		pnl.contentLines = nil
 		// Todo: this is error?
 		return
 	}
 
-	data, err := parseJsonFields(m.line, m.columns)
+	data, err := parseJsonFields(pnl.line, pnl.columns)
 	if err != nil {
-		m.contentLines = []string{"Error parsing JSON fields: " + err.Error()}
+		pnl.contentLines = []string{"Error parsing JSON fields: " + err.Error()}
 		return
 	}
 
@@ -109,67 +109,67 @@ func (m *DetailPanel) computeContentLines() {
 
 	err = encoder.Encode(data)
 	if err != nil {
-		m.contentLines = []string{"Error pretty-printing JSON: " + err.Error()}
+		pnl.contentLines = []string{"Error pretty-printing JSON: " + err.Error()}
 		// Todo: can this be errorMsg?
 		return
 	}
 
 	// Split into lines
 	content := strings.TrimSuffix(buf.String(), "\n")
-	m.contentLines = strings.Split(content, "\n")
+	pnl.contentLines = strings.Split(content, "\n")
 }
 
-func (m DetailPanel) Update(msg tea.Msg) (DetailPanel, tea.Cmd) {
+func (pnl DetailPanel) Update(msg tea.Msg) (DetailPanel, tea.Cmd) {
 
 	switch msg := msg.(type) {
 
 	case lineMsg:
-		m.line = msg.line
-		m.computeContentLines()
-		m.ScrollOffset = 0
+		pnl.line = msg.line
+		pnl.computeContentLines()
+		pnl.ScrollOffset = 0
 
 	case tea.KeyPressMsg:
-		if !m.Focused {
-			return m, nil
+		if !pnl.Focused {
+			return pnl, nil
 		}
 
 		switch msg.String() {
 		case "up", "k":
-			if m.ScrollOffset > 0 {
-				m.ScrollOffset--
+			if pnl.ScrollOffset > 0 {
+				pnl.ScrollOffset--
 			}
 
 		case "down", "j":
 			// Only allow scrolling if content exceeds viewport
-			if m.Height > 0 && len(m.contentLines) > m.Height {
-				maxScroll := len(m.contentLines) - m.Height
-				if m.ScrollOffset < maxScroll {
-					m.ScrollOffset++
+			if pnl.Height > 0 && len(pnl.contentLines) > pnl.Height {
+				maxScroll := len(pnl.contentLines) - pnl.Height
+				if pnl.ScrollOffset < maxScroll {
+					pnl.ScrollOffset++
 				}
 			}
 			// Todo: pageup/down
 		}
 
 	case tea.WindowSizeMsg:
-		m.Width = msg.Width
-		m.Height = msg.Height
-		m.ScrollOffset = 0
+		pnl.Width = msg.Width
+		pnl.Height = msg.Height
+		pnl.ScrollOffset = 0
 		// Todo: better ScrollOffset and may need to recompute contentLines
 	}
 
-	return m, nil
+	return pnl, nil
 }
 
 // Render renders the detail view (pure - no state mutation)
-func (m DetailPanel) Render() string {
-	if m.contentLines == nil {
+func (pnl DetailPanel) Render() string {
+	if pnl.contentLines == nil {
 		return "Loading full record..."
 	}
 
 	// Show visible portion based on scroll offset and height
-	visibleLines := m.contentLines[m.ScrollOffset:]
-	if m.Height > 0 && len(visibleLines) > m.Height {
-		visibleLines = visibleLines[:m.Height] // Todo: dont crash
+	visibleLines := pnl.contentLines[pnl.ScrollOffset:]
+	if pnl.Height > 0 && len(visibleLines) > pnl.Height {
+		visibleLines = visibleLines[:pnl.Height] // Todo: dont crash
 	}
 
 	return strings.Join(visibleLines, "\n")

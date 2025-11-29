@@ -23,3 +23,6 @@ type getPageMsg struct {
 	offset int
 	size   int
 }
+
+// resetMsg signals to reset table position to start
+type resetMsg struct{}

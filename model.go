@@ -28,8 +28,9 @@ type Model struct {
 	TablePanel  TablePanel
 	DetailPanel DetailPanel
 
-	Width  int
-	Height int
+	initialized bool // Set to true after first WindowSizeMsg
+	Width       int
+	Height      int
 }
 
 // NewModel creates a new bt model.
@@ -80,8 +81,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case pageMsg:
 		m.Lines = msg.lines
-		m.TablePanel.TotalLines = msg.count
-		return m, nil
 
 	case getPageMsg:
 		// Todo: msg relay, can we make do with in or out?
@@ -131,6 +130,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
+		if !m.initialized {
+			m.initialized = true
+		}
 
 		adjustedMsg := tea.WindowSizeMsg{
 			Width:  msg.Width,
@@ -153,7 +155,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() tea.View {
-	if m.Width == 0 { // Todo: use m.intialized
+	if !m.initialized {
 		return tea.NewView("Loading...")
 	}
 
@@ -172,8 +174,8 @@ func (m Model) View() tea.View {
 	screenLayer := lipgloss.NewLayer("screen", screenContent)
 
 	// Create footer content and layer positioned at bottom
-	current := m.TablePanel.SelectedLine + 1
-	total := m.TablePanel.TotalLines
+	current := m.TablePanel.Selected + 1
+	total := m.TablePanel.Total
 	footerContent := RenderFooter(current, total, m.Store.Name(), m.Width)
 	if m.errorString != "" {
 		footerContent = m.errorString // Todo: find a home for error string
