@@ -25,7 +25,7 @@ type Model struct {
 
 	Lines []Line
 
-	TablePanel  *TablePanel
+	TablePanel  TablePanel
 	DetailPanel DetailPanel
 
 	Width  int
