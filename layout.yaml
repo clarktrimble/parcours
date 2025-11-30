@@ -19,8 +19,8 @@ columns:
     width: 6
   - field: elapsed
     width: 8
-  - field: request_id
-    width: 10
+#  - field: request_id
+#    width: 10
   - field: worker_id
     width: 10
 #  - field: app_id

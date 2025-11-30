@@ -3,6 +3,7 @@ package parcours
 import (
 	tea "charm.land/bubbletea/v2"
 
+	"parcours/detail"
 	"parcours/message"
 	"parcours/table"
 )
@@ -44,7 +45,7 @@ func (m Model) getLine(id string) tea.Cmd {
 			return message.ErrorMsg{Err: err}
 		}
 
-		return message.LineMsg{Line: line}
+		return detail.LineMsg{Line: line}
 	}
 }
 
@@ -92,9 +93,15 @@ func (m Model) reloadColumns() tea.Cmd {
 		return errorCmd(err)
 	}
 
-	return func() tea.Msg {
-		return table.ColumnsMsg{Columns: layout.Columns, Fields: fields}
-	}
+	// Send column updates to both panels
+	return tea.Batch(
+		func() tea.Msg {
+			return table.ColumnsMsg{Columns: layout.Columns, Fields: fields}
+		},
+		func() tea.Msg {
+			return detail.ColumnsMsg{Columns: layout.Columns}
+		},
+	)
 }
 
 // reloadFilter loads layout from file and updates, and resets and gets page

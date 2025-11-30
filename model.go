@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"parcours/detail"
 	"parcours/message"
 	"parcours/table"
 )
@@ -29,7 +30,7 @@ type Model struct {
 	//Lines []nt.Line
 
 	TablePanel  table.TablePanel
-	DetailPanel DetailPanel
+	DetailPanel detail.DetailPanel
 
 	initialized bool // Set to true after first WindowSizeMsg
 	Width       int
@@ -67,7 +68,7 @@ func NewModel(ctx context.Context, store Store, lgr Logger) (model Model, err er
 		logger:        lgr,
 		CurrentScreen: TableScreen,
 		TablePanel:    table.NewTablePanel(layout.Columns, fields, count),
-		DetailPanel:   NewDetailPanel(layout.Columns),
+		DetailPanel:   detail.NewDetailPanel(layout.Columns),
 	}
 
 	return
@@ -84,6 +85,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case table.TableMsg:
 		m.TablePanel, cmd = m.TablePanel.Update(msg)
+		return m, cmd
+
+	case detail.DetailMsg:
+		m.DetailPanel, cmd = m.DetailPanel.Update(msg)
 		return m, cmd
 
 	case message.GetPageMsg:
@@ -130,8 +135,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		default:
 			// unmatched keys to children
+			var cmds []tea.Cmd
 			m.TablePanel, cmd = m.TablePanel.Update(msg)
-			return m, cmd
+			cmds = append(cmds, cmd)
+			m.DetailPanel, cmd = m.DetailPanel.Update(msg)
+			cmds = append(cmds, cmd)
+			return m, tea.Batch(cmds...)
 		}
 
 	case tea.WindowSizeMsg:
@@ -141,13 +150,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.initialized = true
 		}
 
-		return m, func() tea.Msg {
-			return table.SizeMsg{
-				Width:  msg.Width,
-				Height: msg.Height - footerHeight,
-			}
-		}
+		// Update both panels with new size
+		panelHeight := msg.Height - footerHeight
 
+		var cmds []tea.Cmd
+		m.TablePanel, cmd = m.TablePanel.Update(table.SizeMsg{
+			Width:  msg.Width,
+			Height: panelHeight,
+		})
+		cmds = append(cmds, cmd)
+
+		m.DetailPanel, cmd = m.DetailPanel.Update(detail.SizeMsg{
+			Width:  msg.Width,
+			Height: panelHeight,
+		})
+		cmds = append(cmds, cmd)
+
+		return m, tea.Batch(cmds...)
 	}
 
 	return m, nil
@@ -161,7 +180,7 @@ func (m Model) View() tea.View {
 	var mainView tea.View
 	switch m.CurrentScreen {
 	case DetailScreen:
-		mainView = tea.NewView(m.DetailPanel.Render())
+		mainView = m.DetailPanel.View()
 	case TableScreen:
 		mainView = m.TablePanel.View()
 	default:
