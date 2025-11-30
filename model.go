@@ -113,7 +113,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "r":
 			// Reload columns from layout
-			return m.reloadColumns()
+			return m, m.reloadColumns()
 
 		case "f":
 			// Reload filter from layout
@@ -128,6 +128,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.CurrentScreen == DetailScreen {
 				return m.switchToTable()
 			}
+		default:
+			// unmatched keys to children
+			m.TablePanel, cmd = m.TablePanel.Update(msg)
+			return m, cmd
 		}
 
 	case tea.WindowSizeMsg:
@@ -142,17 +146,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Width:  msg.Width,
 				Height: msg.Height - footerHeight,
 			}
-			// actually calling children from Update is idiomatic, prolly??
 		}
 
 	}
 
-	// Broadcast to all child components
-	// Todo: icanhaz slice of interface?
-	var cmd1, cmd2 tea.Cmd
-	m.TablePanel, cmd1 = m.TablePanel.Update(msg)
-	m.DetailPanel, cmd2 = m.DetailPanel.Update(msg)
-	return m, tea.Sequence(cmd1, cmd2)
+	return m, nil
 }
 
 func (m Model) View() tea.View {
@@ -160,32 +158,30 @@ func (m Model) View() tea.View {
 		return tea.NewView("Loading...")
 	}
 
-	// Get current screen's content from child panes
-	var screenContent string
+	var mainView tea.View
 	switch m.CurrentScreen {
 	case DetailScreen:
-		screenContent = m.DetailPanel.Render()
+		mainView = tea.NewView(m.DetailPanel.Render())
 	case TableScreen:
-		screenContent = m.TablePanel.Render()
+		mainView = m.TablePanel.View()
 	default:
-		screenContent = "Unknown screen" // Todo: error plz
+		mainView = tea.NewView("Unknown screen") // Todo: error plz
 	}
 
-	// Create screen layer at origin (0, 0)
-	screenLayer := lipgloss.NewLayer("screen", screenContent)
-
 	// Create footer content and layer positioned at bottom
-	current := m.TablePanel.Selected + 1
+	selectedLine := m.TablePanel.Selected + 1
 	total := m.TablePanel.Total
-	footerContent := RenderFooter(current, total, m.Store.Name(), m.Width)
+
+	footerContent := RenderFooter(selectedLine, total, m.Store.Name(), m.Width)
 	if m.errorString != "" {
 		footerContent = m.errorString // Todo: find a home for error string
 	}
 	footerLayer := lipgloss.NewLayer("footer", footerContent).Y(m.Height - footerHeight)
+	// end footer
 
 	// Compose layers on canvas
 	canvas := lipgloss.NewCanvas(m.Width, m.Height)
-	canvas.Compose(screenLayer)
+	canvas.Compose(mainView.Content)
 	canvas.Compose(footerLayer)
 
 	view := tea.NewView(canvas)

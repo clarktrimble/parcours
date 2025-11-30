@@ -25,28 +25,18 @@ const (
 
 // TablePanel handles the table view display and navigation state
 type TablePanel struct {
+	// Todo: privatize
 	Selected int // Absolute position (0 to TotalLines-1) of selected line
 	Offset   int // Offset of page shown
 	Total    int // Total log lines after filtering
 
 	Width   int
-	Height  int
+	height  int
 	Focused bool
 
-	//columns []nt.Column
 	colFmts []colFmt
 	lines   []nt.Line
 	table   *table.Table
-}
-
-// PageSize returns the number of rows that fit on screen
-func (pnl TablePanel) PageSize() int {
-	return pnl.Height - headerHeight
-}
-
-// selectedLine returns the index of the currently selected line
-func (pnl TablePanel) selectedLine() int {
-	return pnl.Selected - pnl.Offset
 }
 
 func NewTablePanel(columns []nt.Column, fields []nt.Field, count int) TablePanel {
@@ -60,69 +50,16 @@ func NewTablePanel(columns []nt.Column, fields []nt.Field, count int) TablePanel
 		Total:   count,
 	}
 
-	tablePanel = tablePanel.SetColumns(columns, fields)
+	tablePanel = tablePanel.setColumns(columns, fields)
 
 	return tablePanel
 }
 
 type colFmt struct {
-	idx       int
+	lineIdx   int
 	width     int
-	field     string
+	fieldName string
 	formatter func(nt.Value) string
-}
-
-func (pnl TablePanel) SetColumns(columns []nt.Column, fields []nt.Field) TablePanel {
-
-	// Todo: dont store columns, stashing idx and formatter in them is weird
-	//       better would be a bespoke type that untangles all the things
-	//       built from columns here I think
-
-	//pnl.columns = columns
-	colFmts := []colFmt{}
-
-	// Build field index
-	idxByName := map[string]int{}
-	for i, field := range fields {
-		idxByName[field.Name] = i
-	}
-
-	// Resolve each column against fields
-	for i := range columns {
-		col := &columns[i] // Todo: wtf?
-		if col.Hidden || col.Demote {
-			continue
-		}
-
-		idx := idxByName[col.Field]
-		field := fields[idx]
-
-		//col.FieldIdx = idx
-		//col.Formatter = makeFormatter(field.Type, col.Format)
-		colFmts = append(colFmts, colFmt{
-			idx:       idx,
-			width:     col.Width,
-			field:     col.Field,
-			formatter: makeFormatter(field.Type, col.Format),
-		})
-	}
-	// now colFmts has list of what to render!!
-
-	// Set headers (padded to width+1 for spacing)
-	var headers []string
-	//for _, col := range pnl.columns {
-	//if col.Hidden || col.Demote {
-	//continue
-	//}
-	//padded := fmt.Sprintf("%-*s", col.Width+1, col.Field)
-	for _, colFmt := range colFmts {
-		padded := fmt.Sprintf("%-*s", colFmt.width+1, colFmt.field)
-		headers = append(headers, padded)
-	}
-
-	pnl.table.Headers(headers...)
-	pnl.colFmts = colFmts
-	return pnl
 }
 
 func (pnl TablePanel) Update(msg tea.Msg) (TablePanel, tea.Cmd) {
@@ -130,7 +67,7 @@ func (pnl TablePanel) Update(msg tea.Msg) (TablePanel, tea.Cmd) {
 
 	case SizeMsg:
 		pnl.Width = msg.Width
-		pnl.Height = msg.Height
+		pnl.height = msg.Height
 
 		pageSize := pnl.PageSize() // Todo: fur closure??
 		if pageSize > 0 {
@@ -139,6 +76,15 @@ func (pnl TablePanel) Update(msg tea.Msg) (TablePanel, tea.Cmd) {
 					Offset: pnl.Offset,
 					Size:   pageSize,
 				}
+			}
+		}
+
+	case ColumnsMsg:
+		pnl = pnl.setColumns(msg.Columns, msg.Fields)
+		return pnl, func() tea.Msg {
+			return message.GetPageMsg{
+				Offset: pnl.Offset,
+				Size:   pnl.PageSize(),
 			}
 		}
 
@@ -153,11 +99,6 @@ func (pnl TablePanel) Update(msg tea.Msg) (TablePanel, tea.Cmd) {
 		return pnl, nil
 
 	case tea.KeyPressMsg:
-
-		//if !pnl.Focused {
-		//return pnl, nil
-		//}
-
 		pageSize := pnl.PageSize()
 
 		switch msg.String() {
@@ -213,7 +154,7 @@ func (pnl TablePanel) Update(msg tea.Msg) (TablePanel, tea.Cmd) {
 }
 
 // Render renders the table with the given data
-func (pnl TablePanel) Render() string {
+func (pnl TablePanel) View() tea.View {
 
 	// style selected row
 	selected := pnl.selectedLine() // Todo: neede for closure?
@@ -227,31 +168,12 @@ func (pnl TablePanel) Render() string {
 	// repopulate table
 	pnl.table.ClearRows()
 	for _, line := range pnl.lines {
-		/*
-			var row []string
-			for _, col := range pnl.columns {
-				if col.Hidden || col.Demote {
-					continue
-				}
-
-				formatted := col.Formatter(line[col.FieldIdx]) // Todo: dont crash
-				row = append(row, truncate(formatted, col.Width))
-			}
-		*/
 		row := pnl.row(line)
 		pnl.table.Row(row...)
 	}
 
-	return pnl.table.Render()
-}
-
-func (pnl TablePanel) row(line nt.Line) []string {
-	row := make([]string, len(pnl.colFmts))
-	for i, colFmt := range pnl.colFmts {
-		formatted := colFmt.formatter(line[colFmt.idx]) // Todo: dont crash
-		row[i] = truncate(formatted, colFmt.width)
-	}
-	return row
+	//return pnl.table.Render()
+	return tea.NewView(pnl.table)
 }
 
 // SelectedId returns the id of the currently selected line
@@ -267,6 +189,65 @@ func (pnl TablePanel) SelectedId() (id string, err error) {
 
 	id = pnl.lines[selected][0].String() //Todo: add Id() method to Line?
 	return
+}
+
+// PageSize returns the number of rows that fit on panel
+func (pnl TablePanel) PageSize() int {
+	return pnl.height - headerHeight
+}
+
+// unexported
+
+func (pnl TablePanel) selectedLine() int {
+	return pnl.Selected - pnl.Offset
+}
+
+func (pnl TablePanel) row(line nt.Line) []string {
+	row := make([]string, len(pnl.colFmts))
+	for i, colFmt := range pnl.colFmts {
+		formatted := colFmt.formatter(line[colFmt.lineIdx]) // Todo: dont crash
+		row[i] = truncate(formatted, colFmt.width)
+	}
+	return row
+}
+
+func (pnl TablePanel) setColumns(columns []nt.Column, fields []nt.Field) TablePanel {
+
+	// colFmts tracks order and format of columns to be shown
+	colFmts := []colFmt{}
+
+	idxByName := map[string]int{}
+	for i, field := range fields {
+		idxByName[field.Name] = i
+	}
+
+	for _, col := range columns {
+		if col.Hidden || col.Demote {
+			continue
+		}
+
+		idx := idxByName[col.Field]
+		field := fields[idx] // Todo: dont crash
+
+		colFmts = append(colFmts, colFmt{
+			lineIdx:   idx,
+			width:     col.Width,
+			fieldName: col.Field,
+			formatter: makeFormatter(field.Type, col.Format),
+		})
+	}
+
+	var headers []string
+	for _, colFmt := range colFmts {
+		padded := fmt.Sprintf("%-*s", colFmt.width+1, colFmt.fieldName)
+		headers = append(headers, padded)
+	}
+
+	pnl.table.Headers(headers...)
+	pnl.colFmts = colFmts
+	pnl.lines = nil // lines we had no longer match colFmts
+
+	return pnl
 }
 
 // help

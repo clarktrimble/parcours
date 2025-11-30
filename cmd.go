@@ -74,29 +74,27 @@ func (m Model) switchToDetail() (Model, tea.Cmd) {
 }
 
 // reloadColumns loads layout from file and updates, and gets page
-func (m Model) reloadColumns() (Model, tea.Cmd) {
+func (m Model) reloadColumns() tea.Cmd {
 
 	layout, err := loadLayout(layoutFile)
 	if err != nil {
-		return m, errorCmd(err)
+		return errorCmd(err)
 	}
 
 	err = layout.promote(m.Store)
 	if err != nil {
-		return m, errorCmd(err)
+		return errorCmd(err)
 	}
 
 	// Get updated fields after promotion
 	fields, _, err := m.Store.GetView()
 	if err != nil {
-		return m, errorCmd(err)
+		return errorCmd(err)
 	}
 
-	//m.Lines = nil // Clear old lines to avoid render mismatch
-	m.TablePanel = m.TablePanel.SetColumns(layout.Columns, fields)
-	m.DetailPanel = m.DetailPanel.SetColumns(layout.Columns)
-
-	return m, m.getPage(m.TablePanel.Offset, m.TablePanel.PageSize())
+	return func() tea.Msg {
+		return table.ColumnsMsg{Columns: layout.Columns, Fields: fields}
+	}
 }
 
 // reloadFilter loads layout from file and updates, and resets and gets page
