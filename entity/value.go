@@ -1,4 +1,4 @@
-package parcours
+package entity
 
 import (
 	"fmt"

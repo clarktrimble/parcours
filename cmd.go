@@ -1,47 +1,54 @@
 package parcours
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+
+	"parcours/message"
+	"parcours/table"
+)
 
 // errorCmd creates an error cmd
 func errorCmd(err error) tea.Cmd {
 	return func() tea.Msg {
-		return errorMsg{err: err}
+		return message.ErrorMsg{Err: err}
 	}
 }
 
-// getPage loads a page of data from the store
+// getPage gets a page of lines from the store
 func (m Model) getPage(offset, size int) tea.Cmd {
 	return func() tea.Msg {
+
 		fields, count, err := m.Store.GetView()
 		if err != nil {
-			return errorMsg{err: err}
+			return message.ErrorMsg{Err: err}
 		}
 
 		lines, err := m.Store.GetPage(offset, size)
 		if err != nil {
-			return errorMsg{err: err}
+			return message.ErrorMsg{Err: err}
 		}
 
-		return pageMsg{
-			fields: fields,
-			lines:  lines,
-			count:  count,
+		return table.PageMsg{
+			Fields: fields,
+			Lines:  lines,
+			Count:  count,
 		}
 	}
 }
 
-// getLine loads a full record from the store
-// Todo: this is bucket-brigade?
+// getLine gets a full line from the store
 func (m Model) getLine(id string) tea.Cmd {
 	return func() tea.Msg {
 		line, err := m.Store.GetLine(id)
 		if err != nil {
-			return errorMsg{err: err}
+			return message.ErrorMsg{Err: err}
 		}
 
-		return lineMsg{line: line}
+		return message.LineMsg{Line: line}
 	}
 }
+
+// Todo: the following "cmd"s return model as well, is this bt/elm legit?
 
 // switchToTable switches to the table screen and manages focus
 func (m Model) switchToTable() (Model, tea.Cmd) {
@@ -58,7 +65,7 @@ func (m Model) switchToDetail() (Model, tea.Cmd) {
 	m.TablePanel.Focused = false // Todo: elmify
 	m.DetailPanel.Focused = true
 
-	id, err := m.TablePanel.SelectedId(m.Lines)
+	id, err := m.TablePanel.SelectedId()
 	if err != nil {
 		return m, errorCmd(err)
 	}
@@ -69,7 +76,7 @@ func (m Model) switchToDetail() (Model, tea.Cmd) {
 // reloadColumns loads layout from file and updates, and gets page
 func (m Model) reloadColumns() (Model, tea.Cmd) {
 
-	layout, err := LoadLayout("layout.yaml")
+	layout, err := loadLayout(layoutFile)
 	if err != nil {
 		return m, errorCmd(err)
 	}
@@ -85,37 +92,29 @@ func (m Model) reloadColumns() (Model, tea.Cmd) {
 		return m, errorCmd(err)
 	}
 
-	m.Layout = layout
-	m.Lines = nil // Clear old lines to avoid render mismatch
+	//m.Lines = nil // Clear old lines to avoid render mismatch
 	m.TablePanel = m.TablePanel.SetColumns(layout.Columns, fields)
 	m.DetailPanel = m.DetailPanel.SetColumns(layout.Columns)
 
-	return m, m.getPage(m.TablePanel.Offset, m.TablePanel.pageSize())
+	return m, m.getPage(m.TablePanel.Offset, m.TablePanel.PageSize())
 }
 
 // reloadFilter loads layout from file and updates, and resets and gets page
-func (m Model) reloadFilter() (Model, tea.Cmd) {
-	layout, err := LoadLayout("layout.yaml")
+func (m Model) reloadFilter() tea.Cmd {
+
+	layout, err := loadLayout(layoutFile)
 	if err != nil {
-		return m, errorCmd(err)
+		return errorCmd(err)
 	}
 
+	// Todo: what about "sorts"?
 	err = m.Store.SetView(layout.Filter, nil)
 	if err != nil {
-		return m, errorCmd(err)
+		return errorCmd(err)
 	}
 
-	// Get updated count after filter change
-	//_, count, err := m.Store.GetView()
-	//if err != nil {
-	//return m, errorCmd(err)
-	//}
-
-	m.Layout = layout
-	m.Lines = nil // Clear old lines to avoid render mismatch
-
-	return m, tea.Batch(
-		func() tea.Msg { return resetMsg{} },
-		m.getPage(0, m.TablePanel.pageSize()),
+	return tea.Batch( // Todo: or Sequence??
+		func() tea.Msg { return table.ResetMsg{} },
+		m.getPage(0, m.TablePanel.PageSize()),
 	)
 }

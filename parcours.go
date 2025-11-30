@@ -2,9 +2,11 @@ package parcours
 
 import (
 	"context"
+
+	nt "parcours/entity"
 )
 
-// Todo: look a delish remote_ip logging, borken with "["?
+// Todo: look at delish remote_ip logging, borken with "["?
 // Todo: better nav ijkl and page up/down
 // Todo: full page of lines yeah?
 
@@ -12,12 +14,6 @@ import (
 type Logger interface {
 	Info(ctx context.Context, msg string, kv ...any)
 	Error(ctx context.Context, msg string, err error, kv ...any)
-}
-
-// Field represents metadata about a log field.
-type Field struct {
-	Name string
-	Type string
 }
 
 // Store specifies a backing datastore.
@@ -34,13 +30,13 @@ type Store interface {
 	//SetView Filter and Sort(s)
 	SetView(filter *Filter, sorts []Sort) (err error)
 	// GetView fields and count
-	GetView() (fields []Field, count int, err error)
+	GetView() (fields []nt.Field, count int, err error)
 	// GetPage of log lines
-	GetPage(offset, size int) (lines []Line, err error)
+	GetPage(offset, size int) (lines []nt.Line, err error)
 	// GetJson returns raw json for a log line
 	GetLine(id string) (data map[string]any, err error)
 	// Tail streams log lines
-	Tail(ctx context.Context) (lines <-chan Line, err error)
+	Tail(ctx context.Context) (lines <-chan nt.Line, err error)
 }
 
 type Config struct{}

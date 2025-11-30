@@ -1,4 +1,4 @@
-package parcours
+package entity
 
 type Column struct {
 	Field  string `yaml:"field"`
@@ -8,7 +8,8 @@ type Column struct {
 	Demote bool   `yaml:"demote,omitempty"`
 	Json   bool   `yaml:"json,omitempty"`
 
-	// Resolved at layout time:
-	fieldIdx  int
-	formatter func(Value) string
+	// Resolved at layout time
+	// Todo: dehax
+	//FieldIdx  int                `yaml:"-"`
+	//Formatter func(Value) string `yaml:"-"`
 }

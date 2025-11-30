@@ -5,16 +5,19 @@ import (
 	"maps"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/pkg/errors"
 
-	tea "charm.land/bubbletea/v2"
+	nt "parcours/entity"
+	"parcours/message"
+	"parcours/table"
 )
 
 // Todo: honor width
 
 // DetailPanel handles the detail/full record JSON view display state
 type DetailPanel struct {
-	columns []Column // For JSON field parsing
+	columns []nt.Column // For JSON field parsing
 
 	line         map[string]any // The record data to display
 	contentLines []string       // Rendered content split into lines (cached)
@@ -26,14 +29,14 @@ type DetailPanel struct {
 	ScrollOffset int // Line offset for scrolling content
 }
 
-func NewDetailPanel(columns []Column) DetailPanel {
+func NewDetailPanel(columns []nt.Column) DetailPanel {
 	return DetailPanel{
 		columns: columns,
 	}
 }
 
 // SetColumns updates the columns configuration
-func (pnl DetailPanel) SetColumns(columns []Column) DetailPanel {
+func (pnl DetailPanel) SetColumns(columns []nt.Column) DetailPanel {
 	pnl.columns = columns
 	// Re-render if we have data
 	if pnl.line != nil {
@@ -44,7 +47,7 @@ func (pnl DetailPanel) SetColumns(columns []Column) DetailPanel {
 
 // parseJsonFields parses JSON-escaped strings in configured fields
 // Returns a new map with parsed fields
-func parseJsonFields(data map[string]any, columns []Column) (map[string]any, error) {
+func parseJsonFields(data map[string]any, columns []nt.Column) (map[string]any, error) {
 
 	// Build map of fields that should be parsed
 	jsonFields := make(map[string]bool)
@@ -123,8 +126,8 @@ func (pnl DetailPanel) Update(msg tea.Msg) (DetailPanel, tea.Cmd) {
 
 	switch msg := msg.(type) {
 
-	case lineMsg:
-		pnl.line = msg.line
+	case message.LineMsg:
+		pnl.line = msg.Line
 		pnl.computeContentLines()
 		pnl.ScrollOffset = 0
 
@@ -150,9 +153,9 @@ func (pnl DetailPanel) Update(msg tea.Msg) (DetailPanel, tea.Cmd) {
 			// Todo: pageup/down
 		}
 
-	case panelSizeMsg:
-		pnl.Width = msg.width
-		pnl.Height = msg.height
+	case table.SizeMsg:
+		pnl.Width = msg.Width
+		pnl.Height = msg.Height
 		pnl.ScrollOffset = 0
 		// Todo: better ScrollOffset and may need to recompute contentLines
 	}

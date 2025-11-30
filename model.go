@@ -1,31 +1,34 @@
 package parcours
 
-// Todo: deal with blank line at bottom of app
-
 import (
 	"context"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"parcours/message"
+	"parcours/table"
 )
 
+// Todo: push store into table and detail derp
+
 const (
+	layoutFile   = "layout.yaml"
 	footerHeight = 1
 )
 
 // Model is the bubbletea model for the log viewer TUI.
 type Model struct {
 	Store       Store
-	Layout      *Layout // Todo: obviate?
 	logger      Logger
 	ctx         context.Context
 	errorString string
 
 	CurrentScreen Screen
 
-	Lines []Line
+	//Lines []nt.Line
 
-	TablePanel  TablePanel
+	TablePanel  table.TablePanel
 	DetailPanel DetailPanel
 
 	initialized bool // Set to true after first WindowSizeMsg
@@ -36,7 +39,7 @@ type Model struct {
 // NewModel creates a new bt model.
 func NewModel(ctx context.Context, store Store, lgr Logger) (model Model, err error) {
 
-	layout, err := LoadLayout("layout.yaml")
+	layout, err := loadLayout("layout.yaml")
 	if err != nil {
 		return
 	}
@@ -61,10 +64,9 @@ func NewModel(ctx context.Context, store Store, lgr Logger) (model Model, err er
 
 	model = Model{
 		Store:         store,
-		Layout:        layout,
 		logger:        lgr,
 		CurrentScreen: TableScreen,
-		TablePanel:    NewTablePanel(layout.Columns, fields, count),
+		TablePanel:    table.NewTablePanel(layout.Columns, fields, count),
 		DetailPanel:   NewDetailPanel(layout.Columns),
 	}
 
@@ -77,17 +79,19 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
+	var cmd tea.Cmd
 	switch msg := msg.(type) {
 
-	case pageMsg:
-		m.Lines = msg.lines
+	case table.TableMsg:
+		m.TablePanel, cmd = m.TablePanel.Update(msg)
+		return m, cmd
 
-	case getPageMsg:
-		return m, m.getPage(msg.offset, msg.size)
+	case message.GetPageMsg:
+		return m, m.getPage(msg.Offset, msg.Size)
 
-	case errorMsg:
-		m.logger.Error(m.ctx, "error msg", msg.err)
-		m.errorString = msg.err.Error()
+	case message.ErrorMsg:
+		m.logger.Error(m.ctx, "error msg", msg.Err)
+		m.errorString = msg.Err.Error()
 		//m = m.ready()
 		//return m.refocus(alert)
 		return m, nil
@@ -113,7 +117,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "f":
 			// Reload filter from layout
-			return m.reloadFilter()
+			return m, m.reloadFilter()
 
 		case "right", "l":
 			if m.CurrentScreen == TableScreen {
@@ -133,14 +137,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.initialized = true
 		}
 
-		// Model is layout manager - compute panel sizes and broadcast via Cmd
 		return m, func() tea.Msg {
-			return panelSizeMsg{
-				width:  msg.Width,
-				height: msg.Height - footerHeight,
+			return table.SizeMsg{
+				Width:  msg.Width,
+				Height: msg.Height - footerHeight,
 			}
-			// actually calling childrend from Update is idiomatic, prolly??
+			// actually calling children from Update is idiomatic, prolly??
 		}
+
 	}
 
 	// Broadcast to all child components
@@ -162,7 +166,7 @@ func (m Model) View() tea.View {
 	case DetailScreen:
 		screenContent = m.DetailPanel.Render()
 	case TableScreen:
-		screenContent = m.TablePanel.Render(m.Lines)
+		screenContent = m.TablePanel.Render()
 	default:
 		screenContent = "Unknown screen" // Todo: error plz
 	}

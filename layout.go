@@ -4,14 +4,16 @@ import (
 	"os"
 
 	"gopkg.in/yaml.v3"
+
+	nt "parcours/entity"
 )
 
 type Layout struct {
-	Columns []Column `yaml:"columns"`
-	Filter  *Filter  `yaml:"filter,omitempty"`
+	Columns []nt.Column `yaml:"columns"`
+	Filter  *Filter     `yaml:"filter,omitempty"`
 }
 
-func LoadLayout(path string) (*Layout, error) {
+func loadLayout(path string) (*Layout, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err

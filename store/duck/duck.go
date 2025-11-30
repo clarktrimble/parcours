@@ -8,6 +8,7 @@ import (
 	"github.com/pkg/errors"
 
 	"parcours"
+	nt "parcours/entity"
 )
 
 // Todo: use uptodate lib from duckdb in main
@@ -104,17 +105,17 @@ func (dk *Duck) buildWhereClause() string {
 }
 
 // GetView fields and count
-func (dk *Duck) GetView() (fields []parcours.Field, count int, err error) {
+func (dk *Duck) GetView() (fields []nt.Field, count int, err error) {
 	// Get fields from schema
 	rawFields, err := getFields(dk.db)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Convert to parcours.Field
-	fields = make([]parcours.Field, len(rawFields))
+	// Convert to nt.Field
+	fields = make([]nt.Field, len(rawFields))
 	for i, f := range rawFields {
-		fields[i] = parcours.Field{
+		fields[i] = nt.Field{
 			Name: f.Name,
 			Type: f.Type,
 		}
@@ -133,7 +134,7 @@ func (dk *Duck) GetView() (fields []parcours.Field, count int, err error) {
 }
 
 // GetPage of log lines
-func (dk *Duck) GetPage(offset, size int) (lines []parcours.Line, err error) {
+func (dk *Duck) GetPage(offset, size int) (lines []nt.Line, err error) {
 
 	// Apply filter (TODO: apply sort)
 	whereClause := dk.buildWhereClause()
@@ -159,9 +160,9 @@ func (dk *Duck) GetPage(offset, size int) (lines []parcours.Line, err error) {
 			return
 		}
 
-		line := make(parcours.Line, count)
+		line := make(nt.Line, count)
 		for i, val := range vals {
-			line[i] = parcours.Value{Raw: val}
+			line[i] = nt.Value{Raw: val}
 		}
 		lines = append(lines, line)
 	}
@@ -210,7 +211,7 @@ func (dk *Duck) GetLine(id string) (data map[string]any, err error) {
 }
 
 // Tail streams log lines
-func (dk *Duck) Tail(ctx context.Context) (lines <-chan parcours.Line, err error) {
+func (dk *Duck) Tail(ctx context.Context) (lines <-chan nt.Line, err error) {
 	// Todo:
 	return nil, errors.New("not implemented")
 }

@@ -1,4 +1,4 @@
-package parcours
+package table
 
 import (
 	"fmt"
@@ -7,6 +7,10 @@ import (
 	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/pkg/errors"
+
+	nt "parcours/entity"
+	"parcours/message"
+	"parcours/style"
 )
 
 // Todo: handle cell overflow
@@ -29,12 +33,14 @@ type TablePanel struct {
 	Height  int
 	Focused bool
 
-	columns []Column
+	//columns []nt.Column
+	colFmts []colFmt
+	lines   []nt.Line
 	table   *table.Table
 }
 
-// pageSize returns the number of rows that fit on screen
-func (pnl TablePanel) pageSize() int {
+// PageSize returns the number of rows that fit on screen
+func (pnl TablePanel) PageSize() int {
 	return pnl.Height - headerHeight
 }
 
@@ -43,25 +49,37 @@ func (pnl TablePanel) selectedLine() int {
 	return pnl.Selected - pnl.Offset
 }
 
-func NewTablePanel(columns []Column, fields []Field, count int) TablePanel {
+func NewTablePanel(columns []nt.Column, fields []nt.Field, count int) TablePanel {
 
 	lgt := table.New()
 	styleTable(lgt)
 
-	tablePane := TablePanel{
+	tablePanel := TablePanel{
 		Focused: true, // Todo: elsewhere
 		table:   lgt,
 		Total:   count,
 	}
 
-	tablePane = tablePane.SetColumns(columns, fields)
+	tablePanel = tablePanel.SetColumns(columns, fields)
 
-	return tablePane
+	return tablePanel
 }
 
-func (pnl TablePanel) SetColumns(columns []Column, fields []Field) TablePanel {
+type colFmt struct {
+	idx       int
+	width     int
+	field     string
+	formatter func(nt.Value) string
+}
 
-	pnl.columns = columns
+func (pnl TablePanel) SetColumns(columns []nt.Column, fields []nt.Field) TablePanel {
+
+	// Todo: dont store columns, stashing idx and formatter in them is weird
+	//       better would be a bespoke type that untangles all the things
+	//       built from columns here I think
+
+	//pnl.columns = columns
+	colFmts := []colFmt{}
 
 	// Build field index
 	idxByName := map[string]int{}
@@ -71,48 +89,76 @@ func (pnl TablePanel) SetColumns(columns []Column, fields []Field) TablePanel {
 
 	// Resolve each column against fields
 	for i := range columns {
-		col := &columns[i]
+		col := &columns[i] // Todo: wtf?
+		if col.Hidden || col.Demote {
+			continue
+		}
 
 		idx := idxByName[col.Field]
 		field := fields[idx]
 
-		col.fieldIdx = idx
-		col.formatter = makeFormatter(field.Type, col.Format)
+		//col.FieldIdx = idx
+		//col.Formatter = makeFormatter(field.Type, col.Format)
+		colFmts = append(colFmts, colFmt{
+			idx:       idx,
+			width:     col.Width,
+			field:     col.Field,
+			formatter: makeFormatter(field.Type, col.Format),
+		})
 	}
+	// now colFmts has list of what to render!!
 
 	// Set headers (padded to width+1 for spacing)
 	var headers []string
-	for _, col := range pnl.columns {
-		if col.Hidden || col.Demote {
-			continue
-		}
-		padded := fmt.Sprintf("%-*s", col.Width+1, col.Field)
+	//for _, col := range pnl.columns {
+	//if col.Hidden || col.Demote {
+	//continue
+	//}
+	//padded := fmt.Sprintf("%-*s", col.Width+1, col.Field)
+	for _, colFmt := range colFmts {
+		padded := fmt.Sprintf("%-*s", colFmt.width+1, colFmt.field)
 		headers = append(headers, padded)
 	}
-	pnl.table.Headers(headers...)
 
+	pnl.table.Headers(headers...)
+	pnl.colFmts = colFmts
 	return pnl
 }
 
 func (pnl TablePanel) Update(msg tea.Msg) (TablePanel, tea.Cmd) {
 	switch msg := msg.(type) {
 
-	case resetMsg:
+	case SizeMsg:
+		pnl.Width = msg.Width
+		pnl.Height = msg.Height
+
+		pageSize := pnl.PageSize() // Todo: fur closure??
+		if pageSize > 0 {
+			return pnl, func() tea.Msg {
+				return message.GetPageMsg{
+					Offset: pnl.Offset,
+					Size:   pageSize,
+				}
+			}
+		}
+
+	case PageMsg:
+		pnl.lines = msg.Lines
+		pnl.Total = msg.Count
+		return pnl, nil
+
+	case ResetMsg:
 		pnl.Selected = 0
 		pnl.Offset = 0
 		return pnl, nil
 
-	case pageMsg:
-		pnl.Total = msg.count
-		return pnl, nil
-
 	case tea.KeyPressMsg:
 
-		if !pnl.Focused {
-			return pnl, nil
-		}
+		//if !pnl.Focused {
+		//return pnl, nil
+		//}
 
-		pageSize := pnl.pageSize()
+		pageSize := pnl.PageSize()
 
 		switch msg.String() {
 		case "up", "k":
@@ -155,24 +201,9 @@ func (pnl TablePanel) Update(msg tea.Msg) (TablePanel, tea.Cmd) {
 		// If we've scrolled to a different page, request new data
 		if pnl.Offset != oldScrollOffset {
 			return pnl, func() tea.Msg {
-				return getPageMsg{
-					offset: pnl.Offset,
-					size:   pageSize,
-				}
-			}
-		}
-
-	case panelSizeMsg:
-		pnl.Width = msg.width
-		pnl.Height = msg.height
-
-		// Request data with new page size
-		pageSize := pnl.pageSize()
-		if pageSize > 0 {
-			return pnl, func() tea.Msg {
-				return getPageMsg{
-					offset: pnl.Offset,
-					size:   pageSize,
+				return message.GetPageMsg{
+					Offset: pnl.Offset,
+					Size:   pageSize,
 				}
 			}
 		}
@@ -181,63 +212,77 @@ func (pnl TablePanel) Update(msg tea.Msg) (TablePanel, tea.Cmd) {
 	return pnl, nil
 }
 
-// SelectedId returns the id of the currently selected line
-func (pnl TablePanel) SelectedId(lines []Line) (id string, err error) {
-	selected := pnl.selectedLine()
-
-	if len(lines) == 0 || selected >= len(lines) {
-		err = errors.Errorf("index %d is out of bounds of %d lines", selected, len(lines))
-		return
-	}
-
-	id = lines[selected][0].String() //Todo: add Id() method to Line?
-	return
-}
-
 // Render renders the table with the given data
-func (pnl TablePanel) Render(lines []Line) string {
+func (pnl TablePanel) Render() string {
 
 	// style selected row
 	selected := pnl.selectedLine() // Todo: neede for closure?
 	pnl.table.StyleFunc(func(row, col int) lipgloss.Style {
 		if row == selected {
-			return hlRowStyle
+			return style.HlRowStyle
 		}
-		return unStyle
+		return style.UnStyle
 	})
 
 	// repopulate table
 	pnl.table.ClearRows()
-	for _, line := range lines {
-		var row []string
-		for _, col := range pnl.columns {
-			if col.Hidden || col.Demote {
-				continue
-			}
+	for _, line := range pnl.lines {
+		/*
+			var row []string
+			for _, col := range pnl.columns {
+				if col.Hidden || col.Demote {
+					continue
+				}
 
-			formatted := col.formatter(line[col.fieldIdx]) // Todo: dont crash
-			row = append(row, truncate(formatted, col.Width))
-		}
+				formatted := col.Formatter(line[col.FieldIdx]) // Todo: dont crash
+				row = append(row, truncate(formatted, col.Width))
+			}
+		*/
+		row := pnl.row(line)
 		pnl.table.Row(row...)
 	}
 
 	return pnl.table.Render()
 }
 
+func (pnl TablePanel) row(line nt.Line) []string {
+	row := make([]string, len(pnl.colFmts))
+	for i, colFmt := range pnl.colFmts {
+		formatted := colFmt.formatter(line[colFmt.idx]) // Todo: dont crash
+		row[i] = truncate(formatted, colFmt.width)
+	}
+	return row
+}
+
+// SelectedId returns the id of the currently selected line
+func (pnl TablePanel) SelectedId() (id string, err error) {
+
+	selected := pnl.selectedLine()
+	ln := len(pnl.lines)
+
+	if ln == 0 || selected >= ln {
+		err = errors.Errorf("index %d is out of bounds of %d lines", selected, ln)
+		return
+	}
+
+	id = pnl.lines[selected][0].String() //Todo: add Id() method to Line?
+	return
+}
+
 // help
 
-func makeFormatter(fieldType, format string) func(Value) string {
+func makeFormatter(fieldType, format string) func(nt.Value) string {
 	if format != "" && fieldType == "TIMESTAMP" {
-		return func(v Value) string {
-			t, err := v.Time()
+		return func(val nt.Value) string {
+			t, err := val.Time()
 			if err == nil {
 				return t.Format(format)
 			}
-			return v.String()
+			return val.String()
 		}
 	}
 
-	return func(v Value) string {
+	return func(v nt.Value) string {
 		return v.String()
 	}
 }
@@ -249,7 +294,7 @@ func truncate(in string, width int) string {
 	}
 
 	truncated := in[:width-1]
-	ellipsis := mutedStyle.Render("…")
+	ellipsis := style.MutedStyle.Render("…")
 	return truncated + ellipsis
 }
 
@@ -266,6 +311,6 @@ func styleTable(tbl *table.Table) {
 		BorderLeft(false).   // Disable left border
 		BorderRight(false).  // Disable right border
 		BorderColumn(false). // Disable column separators
-		BorderStyle(tableBorderStyle)
+		BorderStyle(style.TableBorderStyle)
 
 }
