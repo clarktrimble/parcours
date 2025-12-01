@@ -29,11 +29,18 @@ func (m Model) getPage(offset, size int) tea.Cmd {
 			return message.ErrorMsg{Err: err}
 		}
 
-		return table.PageMsg{
-			Fields: fields,
-			Lines:  lines,
-			Count:  count,
-		}
+		return tea.Batch(
+			func() tea.Msg {
+				return table.PageMsg{
+					Fields: fields,
+					Lines:  lines,
+					Count:  count,
+				}
+			},
+			func() tea.Msg {
+				return message.CountMsg{Count: count}
+			},
+		)()
 	}
 }
 
@@ -47,31 +54,6 @@ func (m Model) getLine(id string) tea.Cmd {
 
 		return detail.LineMsg{Line: line}
 	}
-}
-
-// Todo: the following "cmd"s return model as well, is this bt/elm legit?
-
-// switchToTable switches to the table screen and manages focus
-func (m Model) switchToTable() (Model, tea.Cmd) {
-	m.CurrentScreen = TableScreen
-	m.TablePanel.Focused = true // Todo: elmify
-	m.DetailPanel.Focused = false
-
-	return m, nil // honorary cmd here
-}
-
-// switchToDetail switches to the detail screen and manages focus
-func (m Model) switchToDetail() (Model, tea.Cmd) {
-	m.CurrentScreen = DetailScreen
-	m.TablePanel.Focused = false // Todo: elmify
-	m.DetailPanel.Focused = true
-
-	id, err := m.TablePanel.SelectedId()
-	if err != nil {
-		return m, errorCmd(err)
-	}
-
-	return m, m.getLine(id)
 }
 
 // reloadColumns loads layout from file and updates, and gets page
@@ -118,8 +100,9 @@ func (m Model) reloadFilter() tea.Cmd {
 		return errorCmd(err)
 	}
 
-	return tea.Batch( // Todo: or Sequence??
-		func() tea.Msg { return table.ResetMsg{} },
-		m.getPage(0, m.TablePanel.PageSize()),
-	)
+	return func() tea.Msg { return table.ResetMsg{} }
+	//return tea.Batch( // Todo: or Sequence??
+	//func() tea.Msg { return table.ResetMsg{} },
+	//m.getPage(0, m.TablePanel.PageSize()),
+	//)
 }

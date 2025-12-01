@@ -10,12 +10,6 @@ import (
 // Todo: better nav ijkl and page up/down
 // Todo: full page of lines yeah?
 
-// Logger specifies a contextual, structured logger.
-type Logger interface {
-	Info(ctx context.Context, msg string, kv ...any)
-	Error(ctx context.Context, msg string, err error, kv ...any)
-}
-
 // Store specifies a backing datastore.
 // Todo: rename Get/Set View
 type Store interface {
@@ -43,10 +37,10 @@ type Config struct{}
 
 type Parcours struct {
 	store  Store
-	logger Logger
+	logger nt.Logger
 }
 
-func (cfg *Config) New(store Store, lgr Logger) *Parcours {
+func (cfg *Config) New(store Store, lgr nt.Logger) *Parcours {
 
 	return &Parcours{
 		store:  store,

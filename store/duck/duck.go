@@ -15,13 +15,13 @@ import (
 
 type Duck struct {
 	db       *sql.DB
-	logger   parcours.Logger
+	logger   nt.Logger
 	filter   *parcours.Filter
 	sorts    []parcours.Sort
 	filename string
 }
 
-func New(lgr parcours.Logger) (dk *Duck, err error) {
+func New(lgr nt.Logger) (dk *Duck, err error) {
 
 	db, err := sql.Open("duckdb", "")
 	if err != nil {

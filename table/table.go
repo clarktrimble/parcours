@@ -1,6 +1,7 @@
 package table
 
 import (
+	"context"
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
@@ -25,34 +26,40 @@ const (
 
 // TablePanel handles the table view display and navigation state
 type TablePanel struct {
-	// Todo: privatize
-	Selected int // Absolute position (0 to TotalLines-1) of selected line
-	Offset   int // Offset of page shown
-	Total    int // Total log lines after filtering
+	selected int // Absolute position (0 to TotalLines-1) of selected line
+	offset   int // Offset of page shown
+	total    int // Total log lines after filtering
 
-	Width   int
-	height  int
-	Focused bool
+	width  int
+	height int
 
 	colFmts []colFmt
 	lines   []nt.Line
 	table   *table.Table
+
+	ctx    context.Context
+	logger nt.Logger
 }
 
-func NewTablePanel(columns []nt.Column, fields []nt.Field, count int) TablePanel {
+func NewTablePanel(ctx context.Context, columns []nt.Column, fields []nt.Field, count int, lgr nt.Logger) TablePanel {
 
 	lgt := table.New()
 	styleTable(lgt)
 
 	tablePanel := TablePanel{
-		Focused: true, // Todo: elsewhere
-		table:   lgt,
-		Total:   count,
+		table:  lgt,
+		total:  count,
+		ctx:    ctx,
+		logger: lgr,
 	}
 
 	tablePanel = tablePanel.setColumns(columns, fields)
 
 	return tablePanel
+}
+
+func (pnl TablePanel) Init() tea.Cmd {
+	return nil
 }
 
 type colFmt struct {
@@ -62,18 +69,18 @@ type colFmt struct {
 	formatter func(nt.Value) string
 }
 
-func (pnl TablePanel) Update(msg tea.Msg) (TablePanel, tea.Cmd) {
+func (pnl TablePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case SizeMsg:
-		pnl.Width = msg.Width
+		pnl.width = msg.Width
 		pnl.height = msg.Height
 
-		pageSize := pnl.PageSize() // Todo: fur closure??
+		pageSize := pnl.PageSize()
 		if pageSize > 0 {
 			return pnl, func() tea.Msg {
 				return message.GetPageMsg{
-					Offset: pnl.Offset,
+					Offset: pnl.offset,
 					Size:   pageSize,
 				}
 			}
@@ -83,68 +90,94 @@ func (pnl TablePanel) Update(msg tea.Msg) (TablePanel, tea.Cmd) {
 		pnl = pnl.setColumns(msg.Columns, msg.Fields)
 		return pnl, func() tea.Msg {
 			return message.GetPageMsg{
-				Offset: pnl.Offset,
+				Offset: pnl.offset,
 				Size:   pnl.PageSize(),
 			}
 		}
 
 	case PageMsg:
 		pnl.lines = msg.Lines
-		pnl.Total = msg.Count
+		pnl.total = msg.Count
+
+		id, err := pnl.SelectedId()
+		if err == nil {
+			return pnl, func() tea.Msg {
+				return message.SelectedMsg{
+					Row: pnl.selected + 1, // 1-indexed for display // Todo: on the other side
+					Id:  id,
+				}
+			}
+		}
 		return pnl, nil
 
 	case ResetMsg:
-		pnl.Selected = 0
-		pnl.Offset = 0
-		return pnl, nil
+		pnl.selected = 0
+		pnl.offset = 0
+		return pnl, func() tea.Msg {
+			return message.GetPageMsg{
+				Offset: pnl.offset,
+				Size:   pnl.PageSize(),
+			}
+		}
 
 	case tea.KeyPressMsg:
 		pageSize := pnl.PageSize()
 
 		switch msg.String() {
 		case "up", "k":
-			if pnl.Selected > 0 {
-				pnl.Selected--
+			if pnl.selected > 0 {
+				pnl.selected--
 			}
 
 		case "down", "j":
-			if pnl.Selected < pnl.Total-1 {
-				pnl.Selected++
+			if pnl.selected < pnl.total-1 {
+				pnl.selected++
 			}
 
 		case "pgup", "ctrl+u":
-			pnl.Selected -= pageSize
-			if pnl.Selected < 0 {
-				pnl.Selected = 0
+			pnl.selected -= pageSize
+			if pnl.selected < 0 {
+				pnl.selected = 0
 			}
 
 		case "pgdown", "ctrl+d":
-			pnl.Selected += pageSize
-			if pnl.Selected >= pnl.Total {
-				pnl.Selected = pnl.Total - 1
+			pnl.selected += pageSize
+			if pnl.selected >= pnl.total {
+				pnl.selected = pnl.total - 1
 			}
 
 		case "g":
-			pnl.Selected = 0
+			pnl.selected = 0
 
 		case "G":
-			pnl.Selected = pnl.Total - 1
+			pnl.selected = pnl.total - 1
 		}
 
 		// Adjust ScrollOffset to keep SelectedLine visible
-		oldScrollOffset := pnl.Offset
-		if pnl.Selected < pnl.Offset {
-			pnl.Offset = pnl.Selected
-		} else if pnl.Selected >= pnl.Offset+pageSize {
-			pnl.Offset = pnl.Selected - pageSize + 1
+		oldScrollOffset := pnl.offset
+		if pnl.selected < pnl.offset {
+			pnl.offset = pnl.selected
+		} else if pnl.selected >= pnl.offset+pageSize {
+			pnl.offset = pnl.selected - pageSize + 1
 		}
 
 		// If we've scrolled to a different page, request new data
-		if pnl.Offset != oldScrollOffset {
+		if pnl.offset != oldScrollOffset {
 			return pnl, func() tea.Msg {
 				return message.GetPageMsg{
-					Offset: pnl.Offset,
+					Offset: pnl.offset,
 					Size:   pageSize,
+				}
+			}
+		}
+
+		// Selection changed but we have the data - notify parent
+		id, err := pnl.SelectedId()
+		if err == nil {
+			return pnl, func() tea.Msg {
+				return message.SelectedMsg{
+					Row: pnl.selected + 1, // 1-indexed for display
+					Id:  id,
 				}
 			}
 		}
@@ -156,23 +189,14 @@ func (pnl TablePanel) Update(msg tea.Msg) (TablePanel, tea.Cmd) {
 // Render renders the table with the given data
 func (pnl TablePanel) View() tea.View {
 
-	// style selected row
-	selected := pnl.selectedLine() // Todo: neede for closure?
-	pnl.table.StyleFunc(func(row, col int) lipgloss.Style {
-		if row == selected {
-			return style.HlRowStyle
-		}
-		return style.UnStyle
-	})
+	pnl.table.StyleFunc(style.RowStyler(pnl.selectedLine()))
 
-	// repopulate table
 	pnl.table.ClearRows()
 	for _, line := range pnl.lines {
 		row := pnl.row(line)
 		pnl.table.Row(row...)
 	}
 
-	//return pnl.table.Render()
 	return tea.NewView(pnl.table)
 }
 
@@ -199,7 +223,7 @@ func (pnl TablePanel) PageSize() int {
 // unexported
 
 func (pnl TablePanel) selectedLine() int {
-	return pnl.Selected - pnl.Offset
+	return pnl.selected - pnl.offset
 }
 
 func (pnl TablePanel) row(line nt.Line) []string {

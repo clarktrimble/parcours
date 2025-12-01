@@ -1,6 +1,7 @@
 package detail
 
 import (
+	"context"
 	"encoding/json"
 	"maps"
 	"strings"
@@ -12,40 +13,50 @@ import (
 )
 
 // Todo: honor width
+// Todo: show key/val rather than json view
+// Todo: collapsable val
+// Todo: ts, level, info at top
 
 // DetailPanel handles the detail/full record JSON view display state
 type DetailPanel struct {
 	columns []nt.Column // For JSON field parsing
 
 	line         map[string]any // The record data to display
-	contentLines []string       // Rendered content split into lines (cached)
+	contentLines []string       // Rendered content split into lines
 
-	// Display state
-	Width        int
+	width        int
 	height       int
-	Focused      bool
-	ScrollOffset int // Line offset for scrolling content
+	scrollOffset int // Line offset for scrolling content
+
+	ctx    context.Context
+	logger nt.Logger
 }
 
-func NewDetailPanel(columns []nt.Column) DetailPanel {
+func NewDetailPanel(ctx context.Context, columns []nt.Column, lgr nt.Logger) DetailPanel {
 	return DetailPanel{
 		columns: columns,
+		ctx:     ctx,
+		logger:  lgr,
 	}
 }
 
-func (pnl DetailPanel) Update(msg tea.Msg) (DetailPanel, tea.Cmd) {
+func (pnl DetailPanel) Init() tea.Cmd {
+	return nil
+}
+
+func (pnl DetailPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 
 	case LineMsg:
 		pnl.line = msg.Line
 		pnl.computeContentLines()
-		pnl.ScrollOffset = 0
+		pnl.scrollOffset = 0
 
 	case SizeMsg:
-		pnl.Width = msg.Width
+		pnl.width = msg.Width
 		pnl.height = msg.Height
-		pnl.ScrollOffset = 0
+		pnl.scrollOffset = 0
 		// Todo: better ScrollOffset and may need to recompute contentLines
 
 	case ColumnsMsg:
@@ -56,22 +67,19 @@ func (pnl DetailPanel) Update(msg tea.Msg) (DetailPanel, tea.Cmd) {
 		}
 
 	case tea.KeyPressMsg:
-		if !pnl.Focused {
-			return pnl, nil
-		}
 
 		switch msg.String() {
 		case "up", "k":
-			if pnl.ScrollOffset > 0 {
-				pnl.ScrollOffset--
+			if pnl.scrollOffset > 0 {
+				pnl.scrollOffset--
 			}
 
 		case "down", "j":
 			// Only allow scrolling if content exceeds viewport
 			if pnl.height > 0 && len(pnl.contentLines) > pnl.height {
 				maxScroll := len(pnl.contentLines) - pnl.height
-				if pnl.ScrollOffset < maxScroll {
-					pnl.ScrollOffset++
+				if pnl.scrollOffset < maxScroll {
+					pnl.scrollOffset++
 				}
 			}
 			// Todo: pageup/down
@@ -88,7 +96,7 @@ func (pnl DetailPanel) View() tea.View {
 	}
 
 	// Show visible portion based on scroll offset and height
-	visibleLines := pnl.contentLines[pnl.ScrollOffset:]
+	visibleLines := pnl.contentLines[pnl.scrollOffset:]
 	if pnl.height > 0 && len(visibleLines) > pnl.height {
 		visibleLines = visibleLines[:pnl.height]
 	}

@@ -16,3 +16,14 @@ type GetPageMsg struct {
 	Offset int
 	Size   int
 }
+
+// CountMsg contains the total count from store
+type CountMsg struct {
+	Count int
+}
+
+// SelectedMsg contains row and id of selected line
+type SelectedMsg struct {
+	Row int
+	Id  string
+}

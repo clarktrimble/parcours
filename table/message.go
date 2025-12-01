@@ -28,5 +28,3 @@ type ColumnsMsg struct {
 }
 
 type ResetMsg struct{}
-
-// Todo: triumphantly update Detail to these righteous patterns
