@@ -41,32 +41,24 @@ type TablePanel struct {
 	logger nt.Logger
 }
 
-func NewTablePanel(ctx context.Context, columns []nt.Column, fields []nt.Field, count int, lgr nt.Logger) TablePanel {
+func NewTablePanel(ctx context.Context, columns []nt.Column, fields []nt.Field, count int, lgr nt.Logger) (pnl TablePanel, err error) {
 
 	lgt := table.New()
 	styleTable(lgt)
 
-	tablePanel := TablePanel{
+	pnl = TablePanel{
 		table:  lgt,
 		total:  count,
 		ctx:    ctx,
 		logger: lgr,
 	}
 
-	tablePanel = tablePanel.setColumns(columns, fields)
-
-	return tablePanel
+	pnl, err = pnl.setColumns(columns, fields)
+	return
 }
 
 func (pnl TablePanel) Init() tea.Cmd {
 	return nil
-}
-
-type colFmt struct {
-	lineIdx   int
-	width     int
-	fieldName string
-	formatter func(nt.Value) string
 }
 
 func (pnl TablePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -87,7 +79,11 @@ func (pnl TablePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case ColumnsMsg:
-		pnl = pnl.setColumns(msg.Columns, msg.Fields)
+		var err error
+		pnl, err = pnl.setColumns(msg.Columns, msg.Fields)
+		if err != nil {
+			return pnl, message.ErrorCmd(err)
+		}
 		return pnl, func() tea.Msg {
 			return message.GetPageMsg{
 				Offset: pnl.offset,
@@ -98,17 +94,9 @@ func (pnl TablePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PageMsg:
 		pnl.lines = msg.Lines
 		pnl.total = msg.Count
+		pnl.populate()
 
-		id, err := pnl.SelectedId()
-		if err == nil {
-			return pnl, func() tea.Msg {
-				return message.SelectedMsg{
-					Row: pnl.selected + 1, // 1-indexed for display // Todo: on the other side
-					Id:  id,
-				}
-			}
-		}
-		return pnl, nil
+		return pnl, pnl.selectedCmd()
 
 	case ResetMsg:
 		pnl.selected = 0
@@ -122,47 +110,13 @@ func (pnl TablePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		pageSize := pnl.PageSize()
-
-		switch msg.String() {
-		case "up", "k":
-			if pnl.selected > 0 {
-				pnl.selected--
-			}
-
-		case "down", "j":
-			if pnl.selected < pnl.total-1 {
-				pnl.selected++
-			}
-
-		case "pgup", "ctrl+u":
-			pnl.selected -= pageSize
-			if pnl.selected < 0 {
-				pnl.selected = 0
-			}
-
-		case "pgdown", "ctrl+d":
-			pnl.selected += pageSize
-			if pnl.selected >= pnl.total {
-				pnl.selected = pnl.total - 1
-			}
-
-		case "g":
-			pnl.selected = 0
-
-		case "G":
-			pnl.selected = pnl.total - 1
-		}
-
-		// Adjust ScrollOffset to keep SelectedLine visible
-		oldScrollOffset := pnl.offset
-		if pnl.selected < pnl.offset {
-			pnl.offset = pnl.selected
-		} else if pnl.selected >= pnl.offset+pageSize {
-			pnl.offset = pnl.selected - pageSize + 1
-		}
+		selected := handleNavKey(msg.String(), pnl.selected, pnl.total, pageSize)
+		offset := adjustOffset(selected, pnl.offset, pageSize)
 
 		// If we've scrolled to a different page, request new data
-		if pnl.offset != oldScrollOffset {
+		if pnl.offset != offset {
+			pnl.offset = offset
+			pnl.selected = selected
 			return pnl, func() tea.Msg {
 				return message.GetPageMsg{
 					Offset: pnl.offset,
@@ -171,48 +125,19 @@ func (pnl TablePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Selection changed but we have the data - notify parent
-		id, err := pnl.SelectedId()
-		if err == nil {
-			return pnl, func() tea.Msg {
-				return message.SelectedMsg{
-					Row: pnl.selected + 1, // 1-indexed for display
-					Id:  id,
-				}
-			}
+		// Selection changed, tell the world
+		if pnl.selected != selected {
+			pnl.selected = selected
+			return pnl, pnl.selectedCmd()
 		}
 	}
 
 	return pnl, nil
 }
 
-// Render renders the table with the given data
 func (pnl TablePanel) View() tea.View {
-
-	pnl.table.StyleFunc(style.RowStyler(pnl.selectedLine()))
-
-	pnl.table.ClearRows()
-	for _, line := range pnl.lines {
-		row := pnl.row(line)
-		pnl.table.Row(row...)
-	}
-
+	pnl.table.StyleFunc(style.RowStyler(pnl.selectedLocal()))
 	return tea.NewView(pnl.table)
-}
-
-// SelectedId returns the id of the currently selected line
-func (pnl TablePanel) SelectedId() (id string, err error) {
-
-	selected := pnl.selectedLine()
-	ln := len(pnl.lines)
-
-	if ln == 0 || selected >= ln {
-		err = errors.Errorf("index %d is out of bounds of %d lines", selected, ln)
-		return
-	}
-
-	id = pnl.lines[selected][0].String() //Todo: add Id() method to Line?
-	return
 }
 
 // PageSize returns the number of rows that fit on panel
@@ -222,20 +147,78 @@ func (pnl TablePanel) PageSize() int {
 
 // unexported
 
-func (pnl TablePanel) selectedLine() int {
+type colFmt struct {
+	lineIdx   int
+	width     int
+	fieldName string
+	formatter func(nt.Value) string
+}
+
+func (pnl TablePanel) populate() {
+	pnl.table.ClearRows()
+	for _, line := range pnl.lines {
+		row := pnl.row(line)
+		pnl.table.Row(row...)
+	}
+}
+
+func (pnl TablePanel) selectedLocal() int {
 	return pnl.selected - pnl.offset
+}
+
+func handleNavKey(key string, selected, total, pageSize int) int {
+	switch key {
+	case "up", "k":
+		if selected > 0 {
+			selected--
+		}
+
+	case "down", "j":
+		if selected < total-1 {
+			selected++
+		}
+
+	case "pgup", "ctrl+u":
+		selected -= pageSize
+		if selected < 0 {
+			selected = 0
+		}
+
+	case "pgdown", "ctrl+d":
+		selected += pageSize
+		if selected >= total {
+			selected = total - 1
+		}
+
+	case "g":
+		selected = 0
+
+	case "G":
+		selected = total - 1
+	}
+
+	return selected
+}
+
+func adjustOffset(selected, offset, pageSize int) int {
+	if selected < offset {
+		return selected
+	} else if selected >= offset+pageSize {
+		return selected - pageSize + 1
+	}
+	return offset
 }
 
 func (pnl TablePanel) row(line nt.Line) []string {
 	row := make([]string, len(pnl.colFmts))
 	for i, colFmt := range pnl.colFmts {
-		formatted := colFmt.formatter(line[colFmt.lineIdx]) // Todo: dont crash
+		formatted := colFmt.formatter(line.Values[colFmt.lineIdx]) // Todo: dont crash
 		row[i] = truncate(formatted, colFmt.width)
 	}
 	return row
 }
 
-func (pnl TablePanel) setColumns(columns []nt.Column, fields []nt.Field) TablePanel {
+func (pnl TablePanel) setColumns(columns []nt.Column, fields []nt.Field) (TablePanel, error) {
 
 	// colFmts tracks order and format of columns to be shown
 	colFmts := []colFmt{}
@@ -250,8 +233,15 @@ func (pnl TablePanel) setColumns(columns []nt.Column, fields []nt.Field) TablePa
 			continue
 		}
 
-		idx := idxByName[col.Field]
-		field := fields[idx] // Todo: dont crash
+		idx, ok := idxByName[col.Field]
+		if !ok {
+			return pnl, errors.Errorf("column %q not found in fields", col.Field)
+		}
+		if idx < 0 || idx >= len(fields) {
+			return pnl, errors.Errorf("column %q has invalid index %d", col.Field, idx)
+		}
+
+		field := fields[idx]
 
 		colFmts = append(colFmts, colFmt{
 			lineIdx:   idx,
@@ -270,8 +260,9 @@ func (pnl TablePanel) setColumns(columns []nt.Column, fields []nt.Field) TablePa
 	pnl.table.Headers(headers...)
 	pnl.colFmts = colFmts
 	pnl.lines = nil // lines we had no longer match colFmts
+	pnl.populate()
 
-	return pnl
+	return pnl, nil
 }
 
 // help

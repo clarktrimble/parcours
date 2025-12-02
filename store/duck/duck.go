@@ -160,9 +160,18 @@ func (dk *Duck) GetPage(offset, size int) (lines []nt.Line, err error) {
 			return
 		}
 
-		line := make(nt.Line, count)
+		values := make([]nt.Value, count)
 		for i, val := range vals {
-			line[i] = nt.Value{Raw: val}
+			values[i] = nt.Value{Raw: val}
+		}
+
+		// Todo: can do better than first col is id?
+		// Todo: want to think about specifying order?  would untangle table a little
+		// Todo: dont crash
+
+		line := nt.Line{
+			Id:     values[0].String(),
+			Values: values,
 		}
 		lines = append(lines, line)
 	}

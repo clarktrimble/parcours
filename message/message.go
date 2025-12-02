@@ -1,5 +1,7 @@
 package message
 
+import tea "charm.land/bubbletea/v2"
+
 // lineMsg contains a full line
 // Todo: disambiguate line from lines elsewhere (thisn is full/raw)
 type LineMsg struct {
@@ -9,6 +11,13 @@ type LineMsg struct {
 // ErrorMsg contains an error
 type ErrorMsg struct {
 	Err error
+}
+
+// ErrorCmd returns an error cmd
+func ErrorCmd(err error) tea.Cmd {
+	return func() tea.Msg {
+		return ErrorMsg{Err: err}
+	}
 }
 
 // GetPageMsg signals to load a page of lines

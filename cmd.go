@@ -8,13 +8,6 @@ import (
 	"parcours/table"
 )
 
-// errorCmd creates an error cmd
-func errorCmd(err error) tea.Cmd {
-	return func() tea.Msg {
-		return message.ErrorMsg{Err: err}
-	}
-}
-
 // getPage gets a page of lines from the store
 func (m Model) getPage(offset, size int) tea.Cmd {
 	return func() tea.Msg {
@@ -61,18 +54,18 @@ func (m Model) reloadColumns() tea.Cmd {
 
 	layout, err := loadLayout(layoutFile)
 	if err != nil {
-		return errorCmd(err)
+		return message.ErrorCmd(err)
 	}
 
 	err = layout.promote(m.Store)
 	if err != nil {
-		return errorCmd(err)
+		return message.ErrorCmd(err)
 	}
 
 	// Get updated fields after promotion
 	fields, _, err := m.Store.GetView()
 	if err != nil {
-		return errorCmd(err)
+		return message.ErrorCmd(err)
 	}
 
 	// Send column updates to both panels
@@ -91,13 +84,13 @@ func (m Model) reloadFilter() tea.Cmd {
 
 	layout, err := loadLayout(layoutFile)
 	if err != nil {
-		return errorCmd(err)
+		return message.ErrorCmd(err)
 	}
 
 	// Todo: what about "sorts"?
 	err = m.Store.SetView(layout.Filter, nil)
 	if err != nil {
-		return errorCmd(err)
+		return message.ErrorCmd(err)
 	}
 
 	return func() tea.Msg { return table.ResetMsg{} }

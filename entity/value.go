@@ -56,6 +56,9 @@ func (v Value) Time() (time.Time, error) {
 	return t, nil
 }
 
-// Line represents a single log entry as an ordered list of values.
+// Line represents a single log entry with an ID and ordered list of values.
 // The order corresponds to the fields returned by Store.Fields().
-type Line []Value
+type Line struct {
+	Id     string
+	Values []Value
+}

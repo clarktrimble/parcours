@@ -75,8 +75,8 @@ func main() {
 	// Display logs
 	fmt.Printf("=== First %d Logs ===\n", pageSize)
 	for _, line := range lines {
-		fmt.Println("\nLog:")
-		for i, val := range line {
+		fmt.Printf("\nLog (ID: %s):\n", line.Id)
+		for i, val := range line.Values {
 			if i < len(fields) {
 				fmt.Printf("  %s: %s\n", fields[i].Name, val.String())
 			}

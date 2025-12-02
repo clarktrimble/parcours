@@ -21,8 +21,8 @@ columns:
     width: 8
 #  - field: request_id
 #    width: 10
-  - field: worker_id
-    width: 10
+#  - field: worker_id
+#    width: 10
 #  - field: app_id
 #    width: 8
 #  - field: run_id

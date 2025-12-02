@@ -13,7 +13,7 @@ import (
 	"parcours/table"
 )
 
-// Todo: push store into table and detail derp
+// Todo: why is pageup/down broken after running parcours?
 
 const (
 	layoutFile   = "layout.yaml"
@@ -73,11 +73,16 @@ func NewModel(ctx context.Context, store Store, lgr nt.Logger) (model Model, err
 		return
 	}
 
+	tblPanel, err := table.NewTablePanel(ctx, layout.Columns, fields, count, lgr)
+	if err != nil {
+		return
+	}
+
 	model = Model{
 		Store:       store,
 		ctx:         ctx,
 		logger:      lgr,
-		tablePanel:  table.NewTablePanel(ctx, layout.Columns, fields, count, lgr),
+		tablePanel:  tblPanel,
 		detailPanel: detail.NewDetailPanel(ctx, layout.Columns, lgr),
 		active:      tableActive,
 	}
