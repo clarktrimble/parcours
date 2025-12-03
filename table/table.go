@@ -26,9 +26,11 @@ const (
 
 // TablePanel handles the table view display and navigation state
 type TablePanel struct {
-	selected int // Absolute position (0 to TotalLines-1) of selected line
-	offset   int // Offset of page shown
-	total    int // Total log lines after filtering
+	selected    int // Absolute position (0 to TotalLines-1) of selected line
+	offset      int // Offset of page shown
+	total       int // Total log lines after filtering
+	selectedCol int // Index of selected column (0 to len(colFmts)-1)
+	colOffset   int // Index of leftmost visible column
 
 	width  int
 	height int
@@ -112,6 +114,11 @@ func (pnl TablePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		pageSize := pnl.PageSize()
 		selected := handleNavKey(msg.String(), pnl.selected, pnl.total, pageSize)
 		offset := adjustOffset(selected, pnl.offset, pageSize)
+		selectedCol := handleColumnNavKey(msg.String(), pnl.selectedCol, len(pnl.colFmts))
+		colOffset := adjustColOffset(selectedCol, pnl.colOffset, pnl.colFmts, pnl.width)
+
+		pnl.selectedCol = selectedCol
+		pnl.colOffset = colOffset
 
 		// If we've scrolled to a different page, request new data
 		if pnl.offset != offset {
@@ -136,7 +143,9 @@ func (pnl TablePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (pnl TablePanel) View() tea.View {
-	pnl.table.StyleFunc(style.RowStyler(pnl.selectedLocal()))
+	// Convert absolute column index to visual column index (relative to colOffset)
+	visualCol := pnl.selectedCol - pnl.colOffset
+	pnl.table.StyleFunc(style.CellStyler(pnl.selectedLocal(), visualCol))
 	return tea.NewView(pnl.table)
 }
 
@@ -155,9 +164,18 @@ type colFmt struct {
 }
 
 func (pnl TablePanel) populate() {
+	// Set headers for visible columns (from colOffset onwards)
+	var headers []string
+	for i := pnl.colOffset; i < len(pnl.colFmts); i++ {
+		padded := fmt.Sprintf("%-*s", pnl.colFmts[i].width+1, pnl.colFmts[i].fieldName)
+		headers = append(headers, padded)
+	}
+	pnl.table.Headers(headers...)
+
+	// Build rows with visible columns (from colOffset onwards, overflow clips naturally)
 	pnl.table.ClearRows()
 	for _, line := range pnl.lines {
-		row := pnl.row(line)
+		row := pnl.rowFromOffset(line, pnl.colOffset)
 		pnl.table.Row(row...)
 	}
 }
@@ -209,11 +227,86 @@ func adjustOffset(selected, offset, pageSize int) int {
 	return offset
 }
 
+func handleColumnNavKey(key string, selectedCol, totalCols int) int {
+	switch key {
+	case "left", "h":
+		if selectedCol > 0 {
+			selectedCol--
+		}
+
+	case "right", "l":
+		if selectedCol < totalCols-1 {
+			selectedCol++
+		}
+	}
+
+	return selectedCol
+}
+
+// visibleColumns returns the range of columns [start, end) that fit in the given width
+// Note: Currently unused, but may be needed for precise column clipping indicators or performance
+func visibleColumns(colFmts []colFmt, colOffset, width int) (start, end int) {
+	if colOffset >= len(colFmts) {
+		return 0, 0
+	}
+
+	start = colOffset
+	usedWidth := 0
+
+	for i := colOffset; i < len(colFmts); i++ {
+		colWidth := colFmts[i].width + 1 // +1 for padding
+		if usedWidth+colWidth > width {
+			break
+		}
+		usedWidth += colWidth
+		end = i + 1
+	}
+
+	return start, end
+}
+
+// adjustColOffset adjusts column offset to keep selectedCol visible
+func adjustColOffset(selectedCol, colOffset int, colFmts []colFmt, width int) int {
+	// If selected column is before visible range, scroll left
+	if selectedCol < colOffset {
+		return selectedCol
+	}
+
+	// If selected column is after visible range, scroll right
+	_, visEnd := visibleColumns(colFmts, colOffset, width)
+	if selectedCol >= visEnd {
+		// Find the leftmost offset that shows selectedCol
+		for offset := selectedCol; offset >= 0; offset-- {
+			start, end := visibleColumns(colFmts, offset, width)
+			if start <= selectedCol && selectedCol < end {
+				return offset
+			}
+		}
+	}
+
+	return colOffset
+}
+
 func (pnl TablePanel) row(line nt.Line) []string {
 	row := make([]string, len(pnl.colFmts))
 	for i, colFmt := range pnl.colFmts {
 		formatted := colFmt.formatter(line.Values[colFmt.lineIdx]) // Todo: dont crash
 		row[i] = truncate(formatted, colFmt.width)
+	}
+	return row
+}
+
+func (pnl TablePanel) rowFromOffset(line nt.Line, colOffset int) []string {
+	visibleCols := len(pnl.colFmts) - colOffset
+	if visibleCols <= 0 {
+		return []string{}
+	}
+
+	row := make([]string, visibleCols)
+	for i := colOffset; i < len(pnl.colFmts); i++ {
+		colFmt := pnl.colFmts[i]
+		formatted := colFmt.formatter(line.Values[colFmt.lineIdx])
+		row[i-colOffset] = truncate(formatted, colFmt.width)
 	}
 	return row
 }

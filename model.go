@@ -10,6 +10,7 @@ import (
 	"parcours/detail"
 	nt "parcours/entity"
 	"parcours/message"
+	"parcours/style"
 	"parcours/table"
 )
 
@@ -150,17 +151,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "f":
 			return m, m.reloadFilter()
 
-		case "right", "l":
+		case "enter":
 			if m.active == tableActive {
 				m.active = detailActive
 				return m, m.getLine(m.selectedId)
 			}
 
-		case "left", "h":
-			if m.active == detailActive {
-				m.active = tableActive
-				return m, nil
-			}
 		default:
 			if m.active == tableActive {
 				m.tablePanel, cmd = m.tablePanel.Update(msg)
@@ -224,6 +220,7 @@ func (m Model) View() tea.View {
 	canvas.Compose(footerLayer)
 
 	view := tea.NewView(canvas)
+	view.BackgroundColor = style.BackgroundColor
 	view.AltScreen = true
 	return view
 }
