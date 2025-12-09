@@ -3,12 +3,12 @@ package style
 import "charm.land/lipgloss/v2"
 
 var (
-	BackgroundColor  = lipgloss.Color("232")
-	TableBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	HlRowStyle       = lipgloss.NewStyle().Background(lipgloss.Color("234")) // Subtle row highlight
-	HlColStyle       = lipgloss.NewStyle().Background(lipgloss.Color("234")) // Subtle column highlight
-	HlCellStyle      = lipgloss.NewStyle().Background(lipgloss.Color("236")) // Combined effect - slightly brighter
-	MutedStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("248"))
+	BackgroundColor  = lipgloss.Color("234")                                 // Dark warm grey
+	TableBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240")) // Subtle warm grey border
+	HlRowStyle       = lipgloss.NewStyle().Background(lipgloss.Color("235")) // Very subtle warm grey row
+	HlColStyle       = lipgloss.NewStyle().Background(lipgloss.Color("234")) // Twice as subtle - barely visible
+	HlCellStyle      = lipgloss.NewStyle().Background(lipgloss.Color("237")) // Slightly warmer cell
+	MutedStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("246")) // Warm muted grey text
 	UnStyle          = lipgloss.NewStyle()
 )
 

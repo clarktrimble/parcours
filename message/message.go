@@ -1,6 +1,10 @@
 package message
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+
+	nt "parcours/entity"
+)
 
 // lineMsg contains a full line
 // Todo: disambiguate line from lines elsewhere (thisn is full/raw)
@@ -35,4 +39,15 @@ type CountMsg struct {
 type SelectedMsg struct {
 	Row int
 	Id  string
+}
+
+// OpenFilterMsg signals to open filter dialog with cell data
+type OpenFilterMsg struct {
+	Field string // Field name from column
+	Value string // Value from cell
+}
+
+// SetFilterMsg signals to apply a filter to the data
+type SetFilterMsg struct {
+	Filter nt.Filter
 }

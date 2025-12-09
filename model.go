@@ -9,6 +9,7 @@ import (
 
 	"parcours/detail"
 	nt "parcours/entity"
+	"parcours/filter"
 	"parcours/message"
 	"parcours/style"
 	"parcours/table"
@@ -26,6 +27,7 @@ type active int
 const (
 	tableActive active = iota
 	detailActive
+	filterActive
 )
 
 // Model is the bubbletea model for the log viewer TUI.
@@ -37,6 +39,7 @@ type Model struct {
 
 	tablePanel  tea.Model
 	detailPanel tea.Model
+	filterPanel tea.Model
 	active      active
 
 	initialized bool
@@ -85,6 +88,7 @@ func NewModel(ctx context.Context, store Store, lgr nt.Logger) (model Model, err
 		logger:      lgr,
 		tablePanel:  tblPanel,
 		detailPanel: detail.NewDetailPanel(ctx, layout.Columns, lgr),
+		filterPanel: filter.NewFilterPanel(ctx, lgr),
 		active:      tableActive,
 	}
 
@@ -108,6 +112,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case detail.DetailMsg:
 		m.detailPanel, cmd = m.detailPanel.Update(msg)
+		return m, cmd
+
+	case filter.FilterMsg:
+		m.filterPanel, cmd = m.filterPanel.Update(msg)
+		return m, cmd
+
+	case message.SetFilterMsg:
+		// Apply the filter and reload data
+		err := m.Store.SetView(msg.Filter, nil)
+		if err != nil {
+			m.errorString = err.Error()
+			m.active = tableActive
+			return m, nil
+		}
+		// Switch back to table and reset to reload with new filter
+		m.active = tableActive
+		return m, func() tea.Msg { return table.ResetMsg{} }
+
+	case message.OpenFilterMsg:
+		// Open filter dialog with cell data
+		m.active = filterActive
+		m.filterPanel, cmd = m.filterPanel.Update(msg)
 		return m, cmd
 
 	case message.GetPageMsg:
@@ -158,10 +184,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		default:
-			if m.active == tableActive {
+			switch m.active {
+			case tableActive:
 				m.tablePanel, cmd = m.tablePanel.Update(msg)
-			} else {
+			case detailActive:
 				m.detailPanel, cmd = m.detailPanel.Update(msg)
+			case filterActive:
+				m.filterPanel, cmd = m.filterPanel.Update(msg)
 			}
 			return m, cmd
 		}
@@ -188,6 +217,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 		cmds = append(cmds, cmd)
 
+		// Todo: use filter size, or lose
+		m.filterPanel, cmd = m.filterPanel.Update(filter.SizeMsg{
+			Width:  msg.Width,
+			Height: panelHeight,
+		})
+		cmds = append(cmds, cmd)
+
 		return m, tea.Batch(cmds...)
 	}
 
@@ -200,10 +236,14 @@ func (m Model) View() tea.View {
 	}
 
 	var activeView tea.View
-	if m.active == tableActive {
+	switch m.active {
+	case tableActive:
 		activeView = m.tablePanel.View()
-	} else {
+	case detailActive:
 		activeView = m.detailPanel.View()
+	case filterActive:
+		// Show filter dialog over table
+		activeView = m.tablePanel.View()
 	}
 
 	// Create footer content and layer positioned at bottom
@@ -218,6 +258,11 @@ func (m Model) View() tea.View {
 	canvas := lipgloss.NewCanvas(m.Width, m.Height)
 	canvas.Compose(activeView.Content)
 	canvas.Compose(footerLayer)
+
+	// Overlay filter dialog if active
+	if m.active == filterActive {
+		canvas.Compose(m.filterPanel.View().Content)
+	}
 
 	view := tea.NewView(canvas)
 	view.BackgroundColor = style.BackgroundColor

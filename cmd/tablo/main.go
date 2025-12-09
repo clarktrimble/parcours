@@ -43,7 +43,8 @@ func main() {
 	defer dk.Close()
 
 	//logFile := "test/data/smar.log"
-	logFile := "junk/tag2.log"
+	//logFile := "junk/tag2.log"
+	logFile := "junk/tag-wetrun.log"
 
 	// Todo: dont panic
 

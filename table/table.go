@@ -111,6 +111,11 @@ func (pnl TablePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.KeyPressMsg:
+
+		if msg.String() == "c" {
+			return pnl, pnl.filterCmd()
+		}
+
 		pageSize := pnl.PageSize()
 		selected := handleNavKey(msg.String(), pnl.selected, pnl.total, pageSize)
 		offset := adjustOffset(selected, pnl.offset, pageSize)
@@ -182,6 +187,42 @@ func (pnl TablePanel) populate() {
 
 func (pnl TablePanel) selectedLocal() int {
 	return pnl.selected - pnl.offset
+}
+
+func (pnl TablePanel) selectedLine() (line nt.Line, err error) {
+
+	local := pnl.selectedLocal()
+	if local < 0 || local >= len(pnl.lines) {
+		err = errors.Errorf("cannot index %d in page of %d lines", local, len(pnl.lines))
+		return
+	}
+
+	line = pnl.lines[local]
+	return
+}
+
+func (pnl TablePanel) selectedCell() (field string, value nt.Value, err error) {
+
+	line, err := pnl.selectedLine()
+	if err != nil {
+		return
+	}
+
+	if pnl.selectedCol >= len(pnl.colFmts) {
+		err = errors.Errorf("invalid column selection %d (have %d columns)", pnl.selectedCol, len(pnl.colFmts))
+		return
+	}
+
+	colFmt := pnl.colFmts[pnl.selectedCol]
+
+	if colFmt.lineIdx >= len(line.Values) {
+		err = errors.Errorf("column %q index %d out of range (line has %d values)", colFmt.fieldName, colFmt.lineIdx, len(line.Values))
+		return
+	}
+
+	field = colFmt.fieldName
+	value = line.Values[colFmt.lineIdx]
+	return
 }
 
 func handleNavKey(key string, selected, total, pageSize int) int {

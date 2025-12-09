@@ -10,6 +10,7 @@ import (
 
 // getPage gets a page of lines from the store
 func (m Model) getPage(offset, size int) tea.Cmd {
+
 	return func() tea.Msg {
 
 		fields, count, err := m.Store.GetView()
@@ -33,7 +34,8 @@ func (m Model) getPage(offset, size int) tea.Cmd {
 			func() tea.Msg {
 				return message.CountMsg{Count: count}
 			},
-		)()
+		)() // Todo: some other way?
+		//) // Todo: some other way?
 	}
 }
 

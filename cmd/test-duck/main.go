@@ -8,6 +8,7 @@ import (
 
 	_ "github.com/marcboeker/go-duckdb"
 
+	"parcours/entity"
 	"parcours/store/duck"
 )
 
@@ -46,7 +47,7 @@ func main() {
 	}
 
 	// Set empty view (no filter, no sort)
-	if err := dk.SetView(nil, nil); err != nil {
+	if err := dk.SetView(entity.Filter{}, nil); err != nil {
 		log.Fatalf("Failed to set view: %v", err)
 	}
 

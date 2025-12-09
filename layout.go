@@ -10,7 +10,7 @@ import (
 
 type Layout struct {
 	Columns []nt.Column `yaml:"columns"`
-	Filter  *Filter     `yaml:"filter,omitempty"`
+	Filter  nt.Filter   `yaml:"filter,omitempty"`
 }
 
 func loadLayout(path string) (*Layout, error) {

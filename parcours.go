@@ -22,7 +22,7 @@ type Store interface {
 	// Promote a field
 	Promote(field string) (err error)
 	//SetView Filter and Sort(s)
-	SetView(filter *Filter, sorts []Sort) (err error)
+	SetView(filter nt.Filter, sorts []nt.Sort) (err error)
 	// GetView fields and count
 	GetView() (fields []nt.Field, count int, err error)
 	// GetPage of log lines

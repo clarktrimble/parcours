@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 
-	"parcours"
 	nt "parcours/entity"
 )
 
@@ -16,8 +16,8 @@ import (
 type Duck struct {
 	db       *sql.DB
 	logger   nt.Logger
-	filter   *parcours.Filter
-	sorts    []parcours.Sort
+	filter   nt.Filter
+	sorts    []nt.Sort
 	filename string
 }
 
@@ -31,7 +31,7 @@ func New(lgr nt.Logger) (dk *Duck, err error) {
 
 	dk = &Duck{
 		db:     db,
-		sorts:  []parcours.Sort{},
+		sorts:  []nt.Sort{},
 		logger: lgr,
 	}
 
@@ -71,7 +71,7 @@ func (dk *Duck) Promote(field string) (err error) {
 }
 
 // SetView Filter and Sort(s)
-func (dk *Duck) SetView(filter *parcours.Filter, sorts []parcours.Sort) (err error) {
+func (dk *Duck) SetView(filter nt.Filter, sorts []nt.Sort) (err error) {
 	dk.filter = filter
 	dk.sorts = sorts
 	return nil
@@ -79,26 +79,61 @@ func (dk *Duck) SetView(filter *parcours.Filter, sorts []parcours.Sort) (err err
 
 // buildWhereClause converts a Filter to SQL WHERE clause
 func (dk *Duck) buildWhereClause() string {
-	if dk.filter == nil {
+
+	clause := dk.buildFilterExpr(dk.filter)
+	if clause == "" {
 		return ""
 	}
+	return "WHERE " + clause
+}
 
-	switch dk.filter.Op {
-	case parcours.Eq:
-		return fmt.Sprintf("WHERE %s = '%v'", dk.filter.Field, dk.filter.Value)
-	case parcours.Ne:
-		return fmt.Sprintf("WHERE %s != '%v'", dk.filter.Field, dk.filter.Value)
-	case parcours.Gt:
-		return fmt.Sprintf("WHERE %s > %v", dk.filter.Field, dk.filter.Value)
-	case parcours.Gte:
-		return fmt.Sprintf("WHERE %s >= %v", dk.filter.Field, dk.filter.Value)
-	case parcours.Lt:
-		return fmt.Sprintf("WHERE %s < %v", dk.filter.Field, dk.filter.Value)
-	case parcours.Lte:
-		return fmt.Sprintf("WHERE %s <= %v", dk.filter.Field, dk.filter.Value)
-	case parcours.Contains:
-		return fmt.Sprintf("WHERE %s LIKE '%%%v%%'", dk.filter.Field, dk.filter.Value)
-	// TODO: handle And, Or, Not, Match
+// buildFilterExpr recursively builds filter expression (without WHERE prefix)
+func (dk *Duck) buildFilterExpr(f nt.Filter) string {
+	switch f.Op {
+	case nt.Eq:
+		return fmt.Sprintf("%s = '%v'", f.Field, f.Value)
+	case nt.Ne:
+		return fmt.Sprintf("%s != '%v'", f.Field, f.Value)
+	case nt.Gt:
+		return fmt.Sprintf("%s > %v", f.Field, f.Value)
+	case nt.Gte:
+		return fmt.Sprintf("%s >= %v", f.Field, f.Value)
+	case nt.Lt:
+		return fmt.Sprintf("%s < %v", f.Field, f.Value)
+	case nt.Lte:
+		return fmt.Sprintf("%s <= %v", f.Field, f.Value)
+	case nt.Contains:
+		return fmt.Sprintf("%s LIKE '%%%v%%'", f.Field, f.Value)
+	case nt.And:
+		var clauses []string
+		for _, child := range f.Children {
+			if expr := dk.buildFilterExpr(child); expr != "" {
+				clauses = append(clauses, expr)
+			}
+		}
+		if len(clauses) == 0 {
+			return ""
+		}
+		return "(" + strings.Join(clauses, " AND ") + ")"
+	case nt.Or:
+		var clauses []string
+		for _, child := range f.Children {
+			if expr := dk.buildFilterExpr(child); expr != "" {
+				clauses = append(clauses, expr)
+			}
+		}
+		if len(clauses) == 0 {
+			return ""
+		}
+		return "(" + strings.Join(clauses, " OR ") + ")"
+	case nt.Not:
+		if len(f.Children) > 0 {
+			if expr := dk.buildFilterExpr(f.Children[0]); expr != "" {
+				return "NOT (" + expr + ")"
+			}
+		}
+		return ""
+	// TODO: handle Match (regex)
 	default:
 		return ""
 	}
