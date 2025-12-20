@@ -11,8 +11,8 @@ columns:
     width: 6
   - field: message
     width: 30
-  - field: method
-    width: 6
+#  - field: method
+#    width: 6
   - field: path
     width: 18
   - field: status
@@ -21,8 +21,10 @@ columns:
     width: 8
   - field: request_id
     width: 10
-#  - field: worker_id
-#    width: 10
+  - field: worker_id
+    width: 10
+  - field: routine_id
+    width: 10
 #  - field: app_id
 #    width: 8
 #  - field: run_id

@@ -1,6 +1,9 @@
 package style
 
-import "charm.land/lipgloss/v2"
+import (
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
+)
 
 var (
 	BackgroundColor  = lipgloss.Color("234")                                 // Dark warm grey
@@ -37,4 +40,20 @@ func CellStyler(selectedRow, selectedCol int) func(row, col int) lipgloss.Style 
 		}
 		return UnStyle
 	}
+}
+
+// StyleTable applies consistent table styling for borders and separators
+func StyleTable(tbl *table.Table) {
+	tbl.Border(lipgloss.Border{
+		Top:         "─", // Horizontal parts of separator
+		Middle:      "─", // Between columns in separator
+		MiddleLeft:  "─", // Left edge of separator
+		MiddleRight: "─", // Right edge of separator
+	}).
+		BorderTop(false).    // Disable top border
+		BorderBottom(false). // Disable bottom border
+		BorderLeft(false).   // Disable left border
+		BorderRight(false).  // Disable right border
+		BorderColumn(false). // Disable column separators
+		BorderStyle(TableBorderStyle)
 }

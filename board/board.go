@@ -4,9 +4,10 @@ import (
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/pkg/errors"
+
+	"parcours/style"
 )
 
 type Empty struct{}
@@ -191,6 +192,7 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (brd Board) View() tea.View {
 	tbl := table.New()
+	style.StyleTable(tbl)
 
 	// Build headers from files
 	var headers []string
@@ -219,14 +221,8 @@ func (brd Board) View() tea.View {
 		tbl.Row(row...)
 	}
 
-	// Apply styling to highlight focused cell
-	tbl.StyleFunc(func(row, col int) lipgloss.Style {
-		if row == brd.position.rank && col == brd.position.file {
-			// Highlight the focused square
-			return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("170"))
-		}
-		return lipgloss.NewStyle()
-	})
+	// Apply styling to highlight focused square, rank, and file
+	tbl.StyleFunc(style.CellStyler(brd.position.rank, brd.position.file))
 
 	return tea.NewView(tbl)
 }
@@ -265,3 +261,4 @@ type position struct {
 	rank int
 	file int
 }
+

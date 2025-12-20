@@ -9,6 +9,7 @@ import (
 // Todo: look at delish remote_ip logging, borken with "["?
 // Todo: better nav ijkl and page up/down
 // Todo: full page of lines yeah?
+// Todo: fold per column (when value repeats)
 
 // Store specifies a backing datastore.
 // Todo: rename Get/Set View
