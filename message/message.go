@@ -51,3 +51,18 @@ type OpenFilterMsg struct {
 type SetFilterMsg struct {
 	Filter nt.Filter
 }
+
+// Navigation directions
+const (
+	NavDown     = "down"
+	NavUp       = "up"
+	NavPageDown = "pagedown"
+	NavPageUp   = "pageup"
+	NavTop      = "top"
+	NavBottom   = "bottom"
+)
+
+// NavMsg signals navigation that hit a boundary
+type NavMsg struct {
+	Direction string
+}

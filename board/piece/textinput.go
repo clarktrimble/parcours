@@ -1,6 +1,10 @@
-package cell
+package piece
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+
+	"parcours/board"
+)
 
 // TextInput is an editable text field
 type TextInput struct {
@@ -20,11 +24,7 @@ func NewTextInput(value string, maxLength int) TextInput {
 	}
 }
 
-func (t TextInput) Init() tea.Cmd {
-	return nil
-}
-
-func (t TextInput) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (t TextInput) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -60,11 +60,6 @@ func (t TextInput) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return t, nil
 }
 
-func (t TextInput) View() tea.View {
-	// Simple view - just show the value
-	// TODO: Could show cursor position when focused
-	return tea.NewView(t.value)
-}
 
 func (t TextInput) Value() string {
 	return t.value

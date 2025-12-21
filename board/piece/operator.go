@@ -1,6 +1,10 @@
-package cell
+package piece
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+
+	"parcours/board"
+)
 
 // Operator cycles through a list of options
 type Operator struct {
@@ -18,11 +22,7 @@ func NewOperator(options []string, selected int) Operator {
 	}
 }
 
-func (o Operator) Init() tea.Cmd {
-	return nil
-}
-
-func (o Operator) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (o Operator) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -39,13 +39,6 @@ func (o Operator) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return o, nil
-}
-
-func (o Operator) View() tea.View {
-	if o.selected < 0 || o.selected >= len(o.options) {
-		return tea.NewView("?")
-	}
-	return tea.NewView(o.options[o.selected])
 }
 
 func (o Operator) Selected() string {

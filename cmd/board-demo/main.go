@@ -6,7 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"parcours/board"
-	"parcours/board/cell"
+	"parcours/board/piece"
 )
 
 type model struct {
@@ -15,47 +15,47 @@ type model struct {
 }
 
 func initialModel() model {
-	// Create some demo cells
-	row1 := []tea.Model{
-		cell.NewLabel("Name"),
-		cell.NewLabel("Status"),
-		cell.NewLabel("Count"),
-	}
-
-	row2 := []tea.Model{
-		cell.NewTextInput("Alice", 20),
-		cell.NewCheckbox(true),
-		cell.NewLabel("42"),
-	}
-
-	row3 := []tea.Model{
-		cell.NewTextInput("Bob", 20),
-		cell.NewCheckbox(false),
-		cell.NewLabel("17"),
-	}
-
-	row4 := []tea.Model{
-		cell.NewButton("Submit", "enter"),
-		cell.NewOperator([]string{"Easy", "Medium", "Hard"}, 1),
-		cell.NewLabel("99"),
-	}
-
-	// Build ranks
-	ranks := []board.Rank{
-		board.NewRank(row1),
-		board.NewRank(row2),
-		board.NewRank(row3),
-		board.NewRank(row4),
-	}
-
 	// Build files (column headers)
 	files := []board.File{
-		board.NewFile(cell.NewLabel("Column A")),
-		board.NewFile(cell.NewLabel("Column B")),
-		board.NewFile(cell.NewLabel("Column C")),
+		board.NewFile(piece.NewLabel("Name")),
+		board.NewFile(piece.NewLabel("Active")),
+		board.NewFile(piece.NewLabel("Level")),
+		board.NewFile(piece.NewLabel("Score")),
 	}
 
-	brd, err := board.New(ranks, files)
+	// Create multiple rows to test navigation (g/G, pgup/pgdown)
+	var ranks []board.Rank
+
+	// Header row
+	ranks = append(ranks, board.NewRank([]board.Piece{
+		piece.NewLabel("Name"),
+		piece.NewLabel("Active"),
+		piece.NewLabel("Difficulty"),
+		piece.NewLabel("Points"),
+	}))
+
+	// Data rows - make enough to test page navigation
+	names := []string{"Alice", "Bob", "Carol", "Dave", "Eve", "Frank", "Grace", "Hank", "Ivy", "Jack",
+		"Karen", "Leo", "Maya", "Noah", "Olivia", "Paul", "Quinn", "Ruby", "Sam", "Tina"}
+
+	for i, name := range names {
+		ranks = append(ranks, board.NewRank([]board.Piece{
+			piece.NewTextInput(name, 20),
+			piece.NewCheckbox(i%2 == 0),
+			piece.NewOperator([]string{"Easy", "Medium", "Hard"}, i%3),
+			piece.NewLabel(fmt.Sprintf("%d", (i+1)*10)),
+		}))
+	}
+
+	// Action row at bottom
+	ranks = append(ranks, board.NewRank([]board.Piece{
+		piece.NewButton("Submit", "enter"),
+		piece.NewButton("Cancel", "esc"),
+		piece.NewLabel("---"),
+		piece.NewLabel("Total"),
+	}))
+
+	brd, err := board.New(ranks, files, 0, 0)
 	if err != nil {
 		panic(err)
 	}

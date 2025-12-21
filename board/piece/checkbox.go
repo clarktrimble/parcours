@@ -1,6 +1,10 @@
-package cell
+package piece
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+
+	"parcours/board"
+)
 
 // Checkbox is a toggleable checkbox cell
 type Checkbox struct {
@@ -11,11 +15,7 @@ func NewCheckbox(checked bool) Checkbox {
 	return Checkbox{checked: checked}
 }
 
-func (c Checkbox) Init() tea.Cmd {
-	return nil
-}
-
-func (c Checkbox) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (c Checkbox) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		if msg.String() == "t" || msg.String() == " " {
@@ -23,13 +23,6 @@ func (c Checkbox) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return c, nil
-}
-
-func (c Checkbox) View() tea.View {
-	if c.checked {
-		return tea.NewView("[x]")
-	}
-	return tea.NewView("[ ]")
 }
 
 func (c Checkbox) Checked() bool {

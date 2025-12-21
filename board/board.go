@@ -7,35 +7,9 @@ import (
 	"charm.land/lipgloss/v2/table"
 	"github.com/pkg/errors"
 
+	"parcours/message"
 	"parcours/style"
 )
-
-type Empty struct{}
-
-func (empty Empty) String() string {
-	return "empty"
-}
-
-func (empty Empty) Init() tea.Cmd {
-	return nil
-}
-
-func (empty Empty) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	return empty, nil
-}
-
-func (empty Empty) View() tea.View {
-	return tea.NewView("empty")
-}
-
-/*
-type Value interface {
-	//String() string
-	Init() tea.Cmd
-	Update(tea.Msg) (tea.Model, tea.Cmd)
-	View() tea.View
-}
-*/
 
 type Field interface {
 	String() string
@@ -43,12 +17,12 @@ type Field interface {
 
 // Piece represents a board piece that can update and render itself.
 type Piece interface {
-	Update(tea.Msg) (tea.Model, tea.Cmd)
+	Update(tea.Msg) (Piece, tea.Cmd)
 	Render() string
 }
 
 type Square struct {
-	model    tea.Model
+	piece    Piece
 	position position // Todo: use/lose
 }
 
@@ -56,12 +30,12 @@ type Rank struct {
 	squares []Square
 }
 
-// NewRank creates a Rank from a slice of models.
-func NewRank(models []tea.Model) Rank {
-	squares := make([]Square, len(models))
-	for i, model := range models {
+// NewRank creates a Rank from a slice of pieces.
+func NewRank(pieces []Piece) Rank {
+	squares := make([]Square, len(pieces))
+	for i, piece := range pieces {
 		squares[i] = Square{
-			model: model,
+			piece: piece,
 		}
 	}
 	return Rank{squares: squares}
@@ -88,31 +62,10 @@ type Board struct {
 	position position
 	width    int // Number of files
 	height   int // Number of ranks
+	table    *table.Table
 }
 
-func NewBoard(width, height int) Board {
-	ranks := make([]Rank, height)
-	for r := range ranks {
-		squares := make([]Square, width)
-		for f := range squares {
-			squares[f] = Square{
-				model:    Empty{},
-				position: position{file: f, rank: r},
-			}
-		}
-		ranks[r] = Rank{squares: squares}
-	}
-
-	return Board{
-		ranks:    ranks,
-		files:    make([]File, width),
-		width:    width,
-		height:   height,
-		position: position{file: 0, rank: 0},
-	}
-}
-
-func New(ranks []Rank, files []File) (board Board, err error) {
+func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
 
 	if len(ranks) == 0 || len(files) == 0 {
 		err = errors.Errorf("board requires non-zero ranks and files")
@@ -120,36 +73,43 @@ func New(ranks []Rank, files []File) (board Board, err error) {
 	}
 
 	width := len(files)
-	for i, rank := range ranks {
-		if len(rank.squares) != width {
+	height := len(ranks)
+
+	// Validate all ranks have same width
+	for i, r := range ranks {
+		if len(r.squares) != width {
 			err = errors.Errorf("rank %d length does not equal width", i)
 			return
 		}
 	}
 
-	//ranks[0].squares[0].position = position{file: 0, rank: 0}
+	// Validate position
+	if rank < 0 || rank >= height {
+		err = errors.Errorf("rank %d out of bounds [0, %d)", rank, height)
+		return
+	}
+	if file < 0 || file >= width {
+		err = errors.Errorf("file %d out of bounds [0, %d)", file, width)
+		return
+	}
+
+	tbl := table.New()
+	style.StyleTable(tbl)
 
 	board = Board{
 		ranks:    ranks,
 		files:    files,
 		width:    width,
-		height:   len(ranks),
-		position: position{file: 0, rank: 0},
+		height:   height,
+		position: position{file: file, rank: rank},
+		table:    tbl,
 	}
 
 	return
 }
 
 func (brd Board) Init() tea.Cmd {
-	var cmds []tea.Cmd
-	for _, rank := range brd.ranks {
-		for _, square := range rank.squares {
-			if cmd := square.model.Init(); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-		}
-	}
-	return tea.Batch(cmds...)
+	return nil
 }
 
 func (brd Board) Rank() []Square {
@@ -167,33 +127,38 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "up", "k":
-			return brd.MoveUp(), nil
+			return brd.moveUp()
 		case "down", "j":
-			return brd.MoveDown(), nil
+			return brd.moveDown()
 		case "left", "h":
-			return brd.MoveLeft(), nil
+			return brd.moveLeft()
 		case "right", "l":
-			return brd.MoveRight(), nil
+			return brd.moveRight()
+		case "g":
+			return brd.moveTop()
+		case "G":
+			return brd.moveBottom()
+		case "pgup", "ctrl+u":
+			return brd.movePageUp()
+		case "pgdown", "ctrl+d":
+			return brd.movePageDown()
 		}
 	}
 
 	// Pass message to the focused square
 	square := brd.ranks[brd.position.rank].squares[brd.position.file]
-	updatedModel, cmd := square.model.Update(msg)
+	updatedPiece, cmd := square.piece.Update(msg)
 
-	// Update the square with the new model
-	// NOTE: This mutates the shared ranks slice. Safe for bubbletea's single-model
+	// Update the square with the new piece
+	// Note: This mutates the shared ranks slice. Safe for bubbletea's single-model
 	// event loop, but NOT safe if you keep multiple Board instances alive simultaneously
 	// (e.g., for undo/redo or snapshots). If that's needed, clone ranks before mutation.
-	brd.ranks[brd.position.rank].squares[brd.position.file].model = updatedModel
+	brd.ranks[brd.position.rank].squares[brd.position.file].piece = updatedPiece
 
 	return brd, cmd
 }
 
 func (brd Board) View() tea.View {
-	tbl := table.New()
-	style.StyleTable(tbl)
-
 	// Build headers from files
 	var headers []string
 	for _, file := range brd.files {
@@ -204,55 +169,91 @@ func (brd Board) View() tea.View {
 		}
 	}
 	if len(headers) > 0 {
-		tbl.Headers(headers...)
+		brd.table.Headers(headers...)
 	}
 
 	// Build rows from ranks
+	brd.table.ClearRows()
 	for _, rank := range brd.ranks {
 		var row []string
 		for _, square := range rank.squares {
-			// Render each square's piece as a table cell
-			if piece, ok := square.model.(Piece); ok {
-				row = append(row, piece.Render())
-			} else {
-				row = append(row, "?")
-			}
+			row = append(row, square.piece.Render())
 		}
-		tbl.Row(row...)
+		brd.table.Row(row...)
 	}
 
 	// Apply styling to highlight focused square, rank, and file
-	tbl.StyleFunc(style.CellStyler(brd.position.rank, brd.position.file))
+	brd.table.StyleFunc(style.CellStyler(brd.position.rank, brd.position.file))
 
-	return tea.NewView(tbl)
+	return tea.NewView(brd.table)
 }
 
-func (brd Board) MoveUp() Board {
+func (brd Board) moveUp() (Board, tea.Cmd) {
 	if brd.position.rank > 0 {
 		brd.position.rank--
+		return brd, nil
 	}
-	return brd
+	// Hit top edge
+	return brd, func() tea.Msg {
+		return message.NavMsg{Direction: message.NavUp}
+	}
 }
 
-func (brd Board) MoveDown() Board {
+func (brd Board) moveDown() (Board, tea.Cmd) {
 	if brd.position.rank < brd.height-1 {
 		brd.position.rank++
+		return brd, nil
 	}
-	return brd
+	// Hit bottom edge
+	return brd, func() tea.Msg {
+		return message.NavMsg{Direction: message.NavDown}
+	}
 }
 
-func (brd Board) MoveLeft() Board {
+func (brd Board) moveLeft() (Board, tea.Cmd) {
 	if brd.position.file > 0 {
 		brd.position.file--
 	}
-	return brd
+	return brd, nil
 }
 
-func (brd Board) MoveRight() Board {
+func (brd Board) moveRight() (Board, tea.Cmd) {
 	if brd.position.file < brd.width-1 {
 		brd.position.file++
 	}
-	return brd
+	return brd, nil
+}
+
+func (brd Board) moveTop() (Board, tea.Cmd) {
+	// Always move to top of board and signal want absolute top of dataset
+	brd.position.rank = 0
+	return brd, func() tea.Msg {
+		return message.NavMsg{Direction: message.NavTop}
+	}
+}
+
+func (brd Board) moveBottom() (Board, tea.Cmd) {
+	// Always move to bottom of board and signal want absolute bottom of dataset
+	brd.position.rank = brd.height - 1
+	return brd, func() tea.Msg {
+		return message.NavMsg{Direction: message.NavBottom}
+	}
+}
+
+func (brd Board) movePageUp() (Board, tea.Cmd) {
+	// Page up always means previous page (board height = page size)
+	brd.position.rank = 0
+	return brd, func() tea.Msg {
+		return message.NavMsg{Direction: message.NavPageUp}
+	}
+}
+
+func (brd Board) movePageDown() (Board, tea.Cmd) {
+	// Page down always means next page (board height = page size)
+	brd.position.rank = brd.height - 1
+	return brd, func() tea.Msg {
+		return message.NavMsg{Direction: message.NavPageDown}
+	}
 }
 
 // unexported
@@ -261,4 +262,3 @@ type position struct {
 	rank int
 	file int
 }
-
