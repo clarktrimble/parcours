@@ -1,4 +1,4 @@
-package linespanel
+package linepanel
 
 import (
 	nt "parcours/entity"

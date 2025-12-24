@@ -10,7 +10,7 @@ import (
 	"parcours/detail"
 	nt "parcours/entity"
 	"parcours/filter"
-	"parcours/linespanel"
+	"parcours/linepanel"
 	"parcours/message"
 	"parcours/style"
 )
@@ -77,7 +77,7 @@ func NewModel(ctx context.Context, store Store, lgr nt.Logger) (model Model, err
 		return
 	}
 
-	linesPanel := linespanel.New(ctx, layout.Columns, fields, count, lgr)
+	linesPanel := linepanel.New(ctx, layout.Columns, fields, count, lgr)
 
 	model = Model{
 		Store:       store,
@@ -103,12 +103,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 
-	case linespanel.LinesMsg:
+	case linepanel.LinesMsg:
 		m.tablePanel, cmd = m.tablePanel.Update(msg)
 		return m, cmd
 
-	case message.NavMsg:
-		// Route NavMsg to active panel
+	case message.PositionMsg, message.NavMsg:
+		// Route to active panel
 		switch m.active {
 		case tableActive:
 			m.tablePanel, cmd = m.tablePanel.Update(msg)
@@ -135,7 +135,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Switch back to table and reset to reload with new filter
 		m.active = tableActive
-		return m, func() tea.Msg { return linespanel.ResetMsg{} }
+		return m, func() tea.Msg { return linepanel.ResetMsg{} }
 
 	case message.OpenFilterMsg:
 		// Open filter dialog with cell data
@@ -212,7 +212,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		panelHeight := msg.Height - footerHeight
 
 		var cmds []tea.Cmd
-		m.tablePanel, cmd = m.tablePanel.Update(linespanel.SizeMsg{
+		m.tablePanel, cmd = m.tablePanel.Update(linepanel.SizeMsg{
 			Width:  msg.Width,
 			Height: panelHeight,
 		})

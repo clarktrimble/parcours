@@ -1,4 +1,4 @@
-package linespanel
+package linepanel
 
 import (
 	"context"
@@ -15,8 +15,8 @@ const (
 	headerHeight = 2 // Header row + separator line
 )
 
-// LinesPanel displays paginated log lines using Board
-type LinesPanel struct {
+// LinePanel displays paginated log lines using Board
+type LinePanel struct {
 	board tea.Model
 
 	// Data state
@@ -28,6 +28,7 @@ type LinesPanel struct {
 	// Column state
 	columns []nt.Column
 	fields  []nt.Field
+	colMap  map[string]nt.Column // Cached map of field name to column config
 
 	// Size
 	width  int
@@ -37,14 +38,15 @@ type LinesPanel struct {
 	logger nt.Logger
 }
 
-func New(ctx context.Context, columns []nt.Column, fields []nt.Field, count int, lgr nt.Logger) LinesPanel {
-	lp := LinesPanel{
+func New(ctx context.Context, columns []nt.Column, fields []nt.Field, count int, lgr nt.Logger) LinePanel {
+	lp := LinePanel{
 		columns: columns,
 		fields:  fields,
 		total:   count,
 		ctx:     ctx,
 		logger:  lgr,
 	}
+	lp.buildColMap()
 
 	// Initialize with minimal 1x1 board
 	// Todo: find a better approach
@@ -57,11 +59,11 @@ func New(ctx context.Context, columns []nt.Column, fields []nt.Field, count int,
 	return lp
 }
 
-func (lp LinesPanel) Init() tea.Cmd {
+func (lp LinePanel) Init() tea.Cmd {
 	return lp.board.Init()
 }
 
-func (lp LinesPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case SizeMsg:
@@ -75,26 +77,36 @@ func (lp LinesPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lp.total = msg.Count
 		// Try to replace board data (preserves cursor position)
 		ranks := lp.buildRanks()
-		brd, err := lp.board.(board.Board).Replace(ranks)
-		if err != nil {
-			// Dimensions don't match, rebuild board instead
+		var cmd tea.Cmd
+		lp.board, cmd = lp.board.Update(board.ReplaceMsg{Ranks: ranks})
+		// If replace failed (dimensions changed), rebuild board
+		if cmd != nil {
+			// Todo: explicitly signal rather than error cmd hax
 			lp.board = lp.buildBoard()
-			return lp, nil
 		}
-		lp.board = brd
 		return lp, nil
 
 	case ColumnsMsg:
 		lp.columns = msg.Columns
 		lp.fields = msg.Fields
-		// Rebuild board with new columns
-		lp.board = lp.buildBoard()
-		// Request new page with new columns
+		lp.buildColMap()
+		// Request new page with new columns (board will rebuild when dimensions change)
 		return lp, message.GetPageCmd(lp.offset, lp.PageSize())
 
 	case ResetMsg:
 		lp.offset = 0
 		return lp, message.GetPageCmd(0, lp.PageSize())
+
+	case message.PositionMsg:
+		// Board cursor moved - calculate absolute row and send SelectedMsg
+		if msg.Rank >= 0 && msg.Rank < len(lp.lines) {
+			absoluteRow := lp.offset + msg.Rank
+			lineId := lp.lines[msg.Rank].Id
+			return lp, func() tea.Msg {
+				return message.SelectedMsg{Row: absoluteRow, Id: lineId}
+			}
+		}
+		return lp, nil
 
 	case message.NavMsg:
 		// Board hit a boundary - scroll the dataset
@@ -106,10 +118,7 @@ func (lp LinesPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if lp.offset+pageSize < lp.total {
 				lp.offset++
 				lp.scrollingDown = true
-				// Ensure we request a full page
-				if lp.offset+pageSize > lp.total {
-					lp.offset = max(0, lp.total-pageSize)
-				}
+				lp.ensureFullPage(pageSize)
 				return lp, message.GetPageCmd(lp.offset, pageSize)
 			}
 		case message.NavUp:
@@ -123,16 +132,13 @@ func (lp LinesPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if lp.offset+pageSize < lp.total {
 				lp.offset += pageSize
 				lp.scrollingDown = true
-				// Ensure we always request a full page
-				if lp.offset+pageSize > lp.total {
-					lp.offset = max(0, lp.total-pageSize)
-				}
+				lp.ensureFullPage(pageSize)
 				return lp, message.GetPageCmd(lp.offset, pageSize)
 			}
-			// Already at end, move cursor to bottom
-			return lp, func() tea.Msg {
-				return board.MoveToMsg{MoveTo: board.Bottom}
-			}
+			// Already at end, move cursor to bottom directly
+			var cmd tea.Cmd
+			lp.board, cmd = lp.board.Update(board.MoveToMsg{MoveTo: board.Bottom})
+			return lp, cmd
 		case message.NavPageUp:
 			// Jump to previous page
 			if lp.offset > 0 {
@@ -142,6 +148,10 @@ func (lp LinesPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return lp, message.GetPageCmd(lp.offset, pageSize)
 			}
+			// Already at top, move cursor to top directly
+			var cmd tea.Cmd
+			lp.board, cmd = lp.board.Update(board.MoveToMsg{MoveTo: board.Top})
+			return lp, cmd
 		case message.NavTop:
 			// Jump to first page
 			if lp.offset != 0 {
@@ -150,7 +160,7 @@ func (lp LinesPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case message.NavBottom:
 			// Jump to last page
-			newOffset := ((lp.total - 1) / pageSize) * pageSize
+			newOffset := max(0, lp.total-pageSize)
 			if lp.offset != newOffset {
 				lp.offset = newOffset
 				lp.scrollingDown = true
@@ -168,24 +178,34 @@ func (lp LinesPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // PageSize returns the number of rows that fit on panel
-func (lp LinesPanel) PageSize() int {
+func (lp LinePanel) PageSize() int {
 	if lp.height < headerHeight {
 		return 0
 	}
 	return lp.height - headerHeight
 }
 
-func (lp LinesPanel) View() tea.View {
+// ensureFullPage adjusts offset to guarantee a full page request
+func (lp *LinePanel) ensureFullPage(pageSize int) {
+	if lp.offset+pageSize > lp.total {
+		lp.offset = max(0, lp.total-pageSize)
+	}
+}
+
+// buildColMap builds and caches the column map
+func (lp *LinePanel) buildColMap() {
+	lp.colMap = make(map[string]nt.Column)
+	for _, col := range lp.columns {
+		lp.colMap[col.Field] = col
+	}
+}
+
+func (lp LinePanel) View() tea.View {
 	return lp.board.View()
 }
 
 // buildRanks converts current lines into board Ranks
-func (lp LinesPanel) buildRanks() []board.Rank {
-	colMap := make(map[string]nt.Column)
-	for _, col := range lp.columns {
-		colMap[col.Field] = col
-	}
-
+func (lp LinePanel) buildRanks() []board.Rank {
 	var ranks []board.Rank
 	for _, line := range lp.lines {
 		var pieces []board.Piece
@@ -193,7 +213,7 @@ func (lp LinesPanel) buildRanks() []board.Rank {
 			if i >= len(lp.fields) {
 				continue
 			}
-			col, exists := colMap[lp.fields[i].Name]
+			col, exists := lp.colMap[lp.fields[i].Name]
 			if exists && (col.Hidden || col.Demote) {
 				continue
 			}
@@ -205,15 +225,10 @@ func (lp LinesPanel) buildRanks() []board.Rank {
 }
 
 // buildBoard converts current lines and columns into a Board
-func (lp LinesPanel) buildBoard() board.Board {
+func (lp LinePanel) buildBoard() board.Board {
 	var files []board.File
-	colMap := make(map[string]nt.Column)
-	for _, col := range lp.columns {
-		colMap[col.Field] = col
-	}
-
 	for _, field := range lp.fields {
-		col, exists := colMap[field.Name]
+		col, exists := lp.colMap[field.Name]
 		if exists && (col.Hidden || col.Demote) {
 			continue
 		}

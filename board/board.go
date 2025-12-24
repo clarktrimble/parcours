@@ -26,6 +26,11 @@ type MoveToMsg struct {
 	MoveTo MoveTo
 }
 
+// ReplaceMsg signals the board should replace its ranks
+type ReplaceMsg struct {
+	Ranks []Rank
+}
+
 // Piece represents a board piece that can update and render itself.
 type Piece interface {
 	Update(tea.Msg) (Piece, tea.Cmd)
@@ -144,6 +149,14 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle navigation keys
 	switch msg := msg.(type) {
+	case ReplaceMsg:
+		newBrd, err := brd.Replace(msg.Ranks)
+		if err != nil {
+			return brd, func() tea.Msg {
+				return message.ErrorMsg{Err: err}
+			}
+		}
+		return newBrd, nil
 	case MoveToMsg:
 		switch msg.MoveTo {
 		case Top:
@@ -151,7 +164,7 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case Bottom:
 			brd.position.rank = brd.height - 1
 		}
-		return brd, nil
+		return brd, brd.positionCmd()
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "up", "k":
@@ -219,7 +232,7 @@ func (brd Board) View() tea.View {
 func (brd Board) moveUp() (Board, tea.Cmd) {
 	if brd.position.rank > 0 {
 		brd.position.rank--
-		return brd, nil
+		return brd, brd.positionCmd()
 	}
 	// Hit top edge
 	return brd, func() tea.Msg {
@@ -230,7 +243,7 @@ func (brd Board) moveUp() (Board, tea.Cmd) {
 func (brd Board) moveDown() (Board, tea.Cmd) {
 	if brd.position.rank < brd.height-1 {
 		brd.position.rank++
-		return brd, nil
+		return brd, brd.positionCmd()
 	}
 	// Hit bottom edge
 	return brd, func() tea.Msg {
@@ -241,6 +254,7 @@ func (brd Board) moveDown() (Board, tea.Cmd) {
 func (brd Board) moveLeft() (Board, tea.Cmd) {
 	if brd.position.file > 0 {
 		brd.position.file--
+		return brd, brd.positionCmd()
 	}
 	return brd, nil
 }
@@ -248,6 +262,7 @@ func (brd Board) moveLeft() (Board, tea.Cmd) {
 func (brd Board) moveRight() (Board, tea.Cmd) {
 	if brd.position.file < brd.width-1 {
 		brd.position.file++
+		return brd, brd.positionCmd()
 	}
 	return brd, nil
 }
@@ -255,17 +270,19 @@ func (brd Board) moveRight() (Board, tea.Cmd) {
 func (brd Board) moveTop() (Board, tea.Cmd) {
 	// Always move to top of board and signal want absolute top of dataset
 	brd.position.rank = 0
-	return brd, func() tea.Msg {
-		return message.NavMsg{Direction: message.NavTop}
-	}
+	return brd, tea.Batch(
+		brd.positionCmd(),
+		func() tea.Msg { return message.NavMsg{Direction: message.NavTop} },
+	)
 }
 
 func (brd Board) moveBottom() (Board, tea.Cmd) {
 	// Always move to bottom of board and signal want absolute bottom of dataset
 	brd.position.rank = brd.height - 1
-	return brd, func() tea.Msg {
-		return message.NavMsg{Direction: message.NavBottom}
-	}
+	return brd, tea.Batch(
+		brd.positionCmd(),
+		func() tea.Msg { return message.NavMsg{Direction: message.NavBottom} },
+	)
 }
 
 func (brd Board) movePageUp() (Board, tea.Cmd) {
@@ -287,4 +304,11 @@ func (brd Board) movePageDown() (Board, tea.Cmd) {
 type position struct {
 	rank int
 	file int
+}
+
+// positionCmd returns a command that sends the current position
+func (brd Board) positionCmd() tea.Cmd {
+	return func() tea.Msg {
+		return message.PositionMsg{Rank: brd.position.rank, File: brd.position.file}
+	}
 }

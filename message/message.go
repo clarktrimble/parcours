@@ -35,6 +35,12 @@ type CountMsg struct {
 	Count int
 }
 
+// PositionMsg contains the board cursor position
+type PositionMsg struct {
+	Rank int // Row position within board (0-indexed)
+	File int // Column position within board (0-indexed)
+}
+
 // SelectedMsg contains row and id of selected line
 type SelectedMsg struct {
 	Row int
