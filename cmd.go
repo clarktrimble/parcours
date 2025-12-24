@@ -4,8 +4,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"parcours/detail"
+	"parcours/linespanel"
 	"parcours/message"
-	"parcours/table"
 )
 
 // getPage gets a page of lines from the store
@@ -13,22 +13,21 @@ func (m Model) getPage(offset, size int) tea.Cmd {
 
 	return func() tea.Msg {
 
-		fields, count, err := m.Store.GetView()
+		_, count, err := m.Store.GetView()
 		if err != nil {
 			return message.ErrorMsg{Err: err}
 		}
 
-		lines, err := m.Store.GetPage(offset, size)
+		linesData, err := m.Store.GetPage(offset, size)
 		if err != nil {
 			return message.ErrorMsg{Err: err}
 		}
 
 		return tea.Batch(
 			func() tea.Msg {
-				return table.PageMsg{
-					Fields: fields,
-					Lines:  lines,
-					Count:  count,
+				return linespanel.PageMsg{
+					Lines: linesData,
+					Count: count,
 				}
 			},
 			func() tea.Msg {
@@ -73,7 +72,7 @@ func (m Model) reloadColumns() tea.Cmd {
 	// Send column updates to both panels
 	return tea.Batch(
 		func() tea.Msg {
-			return table.ColumnsMsg{Columns: layout.Columns, Fields: fields}
+			return linespanel.ColumnsMsg{Columns: layout.Columns, Fields: fields}
 		},
 		func() tea.Msg {
 			return detail.ColumnsMsg{Columns: layout.Columns}
@@ -95,9 +94,9 @@ func (m Model) reloadFilter() tea.Cmd {
 		return message.ErrorCmd(err)
 	}
 
-	return func() tea.Msg { return table.ResetMsg{} }
+	return func() tea.Msg { return linespanel.ResetMsg{} }
 	//return tea.Batch( // Todo: or Sequence??
-	//func() tea.Msg { return table.ResetMsg{} },
+	//func() tea.Msg { return lines.ResetMsg{} },
 	//m.getPage(0, m.TablePanel.PageSize()),
 	//)
 }

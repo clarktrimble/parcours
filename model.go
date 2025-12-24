@@ -10,9 +10,9 @@ import (
 	"parcours/detail"
 	nt "parcours/entity"
 	"parcours/filter"
+	"parcours/linespanel"
 	"parcours/message"
 	"parcours/style"
-	"parcours/table"
 )
 
 // Todo: why is pageup/down broken after running parcours?
@@ -77,16 +77,13 @@ func NewModel(ctx context.Context, store Store, lgr nt.Logger) (model Model, err
 		return
 	}
 
-	tblPanel, err := table.NewTablePanel(ctx, layout.Columns, fields, count, lgr)
-	if err != nil {
-		return
-	}
+	linesPanel := linespanel.New(ctx, layout.Columns, fields, count, lgr)
 
 	model = Model{
 		Store:       store,
 		ctx:         ctx,
 		logger:      lgr,
-		tablePanel:  tblPanel,
+		tablePanel:  linesPanel,
 		detailPanel: detail.NewDetailPanel(ctx, layout.Columns, lgr),
 		filterPanel: filter.NewFilterPanel(ctx, lgr),
 		active:      tableActive,
@@ -106,8 +103,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 
-	case table.TableMsg:
+	case linespanel.LinesMsg:
 		m.tablePanel, cmd = m.tablePanel.Update(msg)
+		return m, cmd
+
+	case message.NavMsg:
+		// Route NavMsg to active panel
+		switch m.active {
+		case tableActive:
+			m.tablePanel, cmd = m.tablePanel.Update(msg)
+		case detailActive:
+			m.detailPanel, cmd = m.detailPanel.Update(msg)
+		}
 		return m, cmd
 
 	case detail.DetailMsg:
@@ -128,7 +135,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Switch back to table and reset to reload with new filter
 		m.active = tableActive
-		return m, func() tea.Msg { return table.ResetMsg{} }
+		return m, func() tea.Msg { return linespanel.ResetMsg{} }
 
 	case message.OpenFilterMsg:
 		// Open filter dialog with cell data
@@ -205,7 +212,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		panelHeight := msg.Height - footerHeight
 
 		var cmds []tea.Cmd
-		m.tablePanel, cmd = m.tablePanel.Update(table.SizeMsg{
+		m.tablePanel, cmd = m.tablePanel.Update(linespanel.SizeMsg{
 			Width:  msg.Width,
 			Height: panelHeight,
 		})

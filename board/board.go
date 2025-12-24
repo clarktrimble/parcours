@@ -1,8 +1,6 @@
 package board
 
 import (
-	"slices"
-
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/pkg/errors"
@@ -13,6 +11,19 @@ import (
 
 type Field interface {
 	String() string
+}
+
+// MoveTo positions
+type MoveTo int
+
+const (
+	Top MoveTo = iota
+	Bottom
+)
+
+// MoveToMsg signals cursor should move to a position
+type MoveToMsg struct {
+	MoveTo MoveTo
 }
 
 // Piece represents a board piece that can update and render itself.
@@ -65,33 +76,36 @@ type Board struct {
 	table    *table.Table
 }
 
-func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
+func (brd Board) validate() error {
 
-	if len(ranks) == 0 || len(files) == 0 {
-		err = errors.Errorf("board requires non-zero ranks and files")
-		return
+	if len(brd.ranks) == 0 || len(brd.files) == 0 {
+		return errors.Errorf("board requires non-zero ranks and files")
 	}
 
-	width := len(files)
-	height := len(ranks)
+	if len(brd.ranks) != brd.height {
+		return errors.Errorf("ranks length %d does not match height %d", len(brd.ranks), brd.height)
+	}
+	if len(brd.files) != brd.width {
+		return errors.Errorf("files length %d does not match width %d", len(brd.files), brd.width)
+	}
 
-	// Validate all ranks have same width
-	for i, r := range ranks {
-		if len(r.squares) != width {
-			err = errors.Errorf("rank %d length does not equal width", i)
-			return
+	for i, r := range brd.ranks {
+		if len(r.squares) != brd.width {
+			return errors.Errorf("rank %d length does not equal width", i)
 		}
 	}
 
-	// Validate position
-	if rank < 0 || rank >= height {
-		err = errors.Errorf("rank %d out of bounds [0, %d)", rank, height)
-		return
+	if brd.position.rank < 0 || brd.position.rank >= brd.height {
+		return errors.Errorf("rank %d out of bounds [0, %d)", brd.position.rank, brd.height)
 	}
-	if file < 0 || file >= width {
-		err = errors.Errorf("file %d out of bounds [0, %d)", file, width)
-		return
+	if brd.position.file < 0 || brd.position.file >= brd.width {
+		return errors.Errorf("file %d out of bounds [0, %d)", brd.position.file, brd.width)
 	}
+
+	return nil
+}
+
+func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
 
 	tbl := table.New()
 	style.StyleTable(tbl)
@@ -99,12 +113,26 @@ func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
 	board = Board{
 		ranks:    ranks,
 		files:    files,
-		width:    width,
-		height:   height,
+		width:    len(files),
+		height:   len(ranks),
 		position: position{file: file, rank: rank},
 		table:    tbl,
 	}
 
+	err = board.validate()
+	return
+}
+
+func (brd Board) Replace(ranks []Rank) (board Board, err error) {
+
+	brd.ranks = ranks
+
+	err = brd.validate()
+	if err != nil {
+		return
+	}
+
+	board = brd
 	return
 }
 
@@ -112,18 +140,18 @@ func (brd Board) Init() tea.Cmd {
 	return nil
 }
 
-func (brd Board) Rank() []Square {
-	return slices.Clone(brd.ranks[brd.position.rank].squares)
-}
-
-func (brd Board) Square() Square {
-	return brd.ranks[brd.position.rank].squares[brd.position.file]
-}
-
 func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Handle navigation keys
 	switch msg := msg.(type) {
+	case MoveToMsg:
+		switch msg.MoveTo {
+		case Top:
+			brd.position.rank = 0
+		case Bottom:
+			brd.position.rank = brd.height - 1
+		}
+		return brd, nil
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "up", "k":
@@ -241,16 +269,14 @@ func (brd Board) moveBottom() (Board, tea.Cmd) {
 }
 
 func (brd Board) movePageUp() (Board, tea.Cmd) {
-	// Page up always means previous page (board height = page size)
-	brd.position.rank = 0
+	// Page up: request previous page, preserve cursor position
 	return brd, func() tea.Msg {
 		return message.NavMsg{Direction: message.NavPageUp}
 	}
 }
 
 func (brd Board) movePageDown() (Board, tea.Cmd) {
-	// Page down always means next page (board height = page size)
-	brd.position.rank = brd.height - 1
+	// Page down: request next page, preserve cursor position
 	return brd, func() tea.Msg {
 		return message.NavMsg{Direction: message.NavPageDown}
 	}

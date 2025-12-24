@@ -13,6 +13,7 @@ import (
 
 // Store specifies a backing datastore.
 // Todo: rename Get/Set View
+// Todo: we now rely on col order from Store, arrange to set
 type Store interface {
 	// Name returns the name of the data source
 	Name() string
