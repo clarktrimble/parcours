@@ -31,6 +31,12 @@ type MoveToMsg struct {
 	MoveTo MoveTo
 }
 
+// SizeMsg tells the board its display size
+type SizeMsg struct {
+	Width  int
+	Height int
+}
+
 // ReplaceMsg signals the board should replace its ranks
 type ReplaceMsg struct {
 	Ranks []Rank
@@ -76,6 +82,10 @@ type Board struct {
 	width    int // Number of files
 	height   int // Number of ranks
 	table    *table.Table
+
+	// Viewport
+	viewportWidth int // Display width in characters
+	fileOffset    int // Index of leftmost visible file (for horizontal scrolling)
 }
 
 func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
@@ -115,8 +125,11 @@ func (brd Board) Init() tea.Cmd {
 
 func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
-	// Handle navigation keys
 	switch msg := msg.(type) {
+	case SizeMsg:
+		brd.viewportWidth = msg.Width
+		brd.fileOffset = brd.adjustFileOffset()
+		return brd, nil
 	case ReplaceMsg:
 		newBrd, err := brd.Replace(msg.Ranks)
 		if err != nil {
@@ -168,27 +181,33 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (brd Board) View() tea.View {
-	// Build headers from files
+	// Get visible file range
+	visStart, visEnd := brd.visibleFiles()
+
+	// Build headers from visible files only
 	var headers []string
-	for _, file := range brd.files {
+	for i := visStart; i < visEnd; i++ {
+		file := brd.files[i]
 		headers = append(headers, fmt.Sprintf("%-*s", file.Width()+gutter, file.Name()))
 	}
 	if len(headers) > 0 {
 		brd.table.Headers(headers...)
 	}
 
-	// Build rows from ranks
+	// Build rows from ranks, including only visible files
 	brd.table.ClearRows()
 	for _, rank := range brd.ranks {
 		var row []string
-		for i, square := range rank.squares {
+		for i := visStart; i < visEnd; i++ {
+			square := rank.squares[i]
 			row = append(row, truncate(square.piece.Render(), brd.files[i].Width()))
 		}
 		brd.table.Row(row...)
 	}
 
-	// Apply styling to highlight focused square, rank, and file
-	brd.table.StyleFunc(style.CellStyler(brd.position.rank, brd.position.file))
+	// Apply styling - adjust file index to be relative to visible range
+	visualFile := brd.position.file - visStart
+	brd.table.StyleFunc(style.CellStyler(brd.position.rank, visualFile))
 
 	return tea.NewView(brd.table)
 }
@@ -218,6 +237,7 @@ func (brd Board) moveDown() (Board, tea.Cmd) {
 func (brd Board) moveLeft() (Board, tea.Cmd) {
 	if brd.position.file > 0 {
 		brd.position.file--
+		brd.fileOffset = brd.adjustFileOffset()
 		return brd, brd.positionCmd()
 	}
 	return brd, nil
@@ -226,6 +246,7 @@ func (brd Board) moveLeft() (Board, tea.Cmd) {
 func (brd Board) moveRight() (Board, tea.Cmd) {
 	if brd.position.file < brd.width-1 {
 		brd.position.file++
+		brd.fileOffset = brd.adjustFileOffset()
 		return brd, brd.positionCmd()
 	}
 	return brd, nil
@@ -290,6 +311,60 @@ func (brd Board) positionCmd() tea.Cmd {
 		Value: brd.ranks[brd.position.rank].squares[brd.position.file].piece.Value(),
 	}
 	return func() tea.Msg { return pos }
+}
+
+// visibleFiles returns the range of files [start, end) that fit in the viewport width
+func (brd Board) visibleFiles() (start, end int) {
+	return brd.visibleFilesFrom(brd.fileOffset)
+}
+
+// visibleFilesFrom returns the range of files [start, end) that fit starting from the given offset
+func (brd Board) visibleFilesFrom(fileOffset int) (start, end int) {
+	if fileOffset >= len(brd.files) {
+		return 0, 0
+	}
+	if brd.viewportWidth == 0 {
+		// No width constraint, show all files from offset
+		return fileOffset, len(brd.files)
+	}
+
+	start = fileOffset
+	usedWidth := 0
+
+	for i := fileOffset; i < len(brd.files); i++ {
+		fileWidth := brd.files[i].Width() + gutter
+		if usedWidth+fileWidth > brd.viewportWidth {
+			break
+		}
+		usedWidth += fileWidth
+		end = i + 1
+	}
+
+	return start, end
+}
+
+// adjustFileOffset returns fileOffset adjusted to keep position.file visible
+func (brd Board) adjustFileOffset() int {
+	// If selected file is before visible range, scroll left
+	if brd.position.file < brd.fileOffset {
+		return brd.position.file
+	}
+
+	// If selected file is after visible range, scroll right minimally
+	_, visEnd := brd.visibleFiles()
+	if brd.position.file >= visEnd {
+		// Increment offset until selected file is just visible (at right edge)
+		for offset := brd.fileOffset + 1; offset <= brd.position.file; offset++ {
+			_, end := brd.visibleFilesFrom(offset)
+			if brd.position.file < end {
+				return offset
+			}
+		}
+		// Fallback: put selected file at left edge
+		return brd.position.file
+	}
+
+	return brd.fileOffset
 }
 
 func (brd Board) validate() error {

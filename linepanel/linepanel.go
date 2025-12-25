@@ -82,6 +82,8 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case SizeMsg:
 		lp.width = msg.Width
 		lp.height = msg.Height
+		// Forward size to board
+		lp.board, _ = lp.board.Update(board.SizeMsg{Width: msg.Width, Height: msg.Height})
 		// Request initial page of data (board will be built when PageMsg arrives)
 		return lp, message.GetPageCmd(lp.offset, lp.PageSize())
 
@@ -282,6 +284,7 @@ func makeFormatter(fieldType, format string) func(nt.Value) string {
 }
 
 // buildBoard converts current lines and columns into a Board
+// Todo: rethink Board genisis, like totally
 func (lp LinePanel) buildBoard() board.Board {
 	var files []board.File
 	for _, field := range lp.fields {
@@ -301,5 +304,12 @@ func (lp LinePanel) buildBoard() board.Board {
 	}
 
 	brd, _ := board.New(ranks, files, startRank, 0)
+
+	// Apply current viewport size to new board
+	if lp.width > 0 {
+		sized, _ := brd.Update(board.SizeMsg{Width: lp.width, Height: lp.height})
+		brd = sized.(board.Board) // Todo: unfuck
+	}
+
 	return brd
 }

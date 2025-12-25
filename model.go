@@ -93,6 +93,7 @@ func NewModel(ctx context.Context, store Store, lgr nt.Logger) (model Model, err
 }
 
 func (m Model) Init() tea.Cmd {
+	// Todo: call children for good form
 	return nil
 }
 

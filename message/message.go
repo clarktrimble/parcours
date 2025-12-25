@@ -36,6 +36,7 @@ type CountMsg struct {
 }
 
 // PositionMsg contains the board cursor position and selected cell info
+// Todo: likely this belongs to Board pkg?
 type PositionMsg struct {
 	Rank  int    // Row position within board (0-indexed)
 	File  int    // Column position within board (0-indexed)
