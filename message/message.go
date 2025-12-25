@@ -35,10 +35,12 @@ type CountMsg struct {
 	Count int
 }
 
-// PositionMsg contains the board cursor position
+// PositionMsg contains the board cursor position and selected cell info
 type PositionMsg struct {
-	Rank int // Row position within board (0-indexed)
-	File int // Column position within board (0-indexed)
+	Rank  int    // Row position within board (0-indexed)
+	File  int    // Column position within board (0-indexed)
+	Field string // Field name from the column header
+	Value string // Cell value from the piece
 }
 
 // SelectedMsg contains row and id of selected line

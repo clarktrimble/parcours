@@ -35,3 +35,10 @@ func (c Checkbox) Render() string {
 	}
 	return "[ ]"
 }
+
+func (c Checkbox) Value() string {
+	if c.checked {
+		return "true"
+	}
+	return "false"
+}

@@ -27,6 +27,10 @@ func (l Label) Render() string {
 	return l.text
 }
 
+func (l Label) Value() string {
+	return l.text
+}
+
 // Todo: dehack, this is here so Label can act as Field
 func (l Label) String() string {
 	return l.text

@@ -11,6 +11,15 @@ import (
 	"parcours/message"
 )
 
+// columnFile implements board.File
+type columnFile struct {
+	name  string
+	width int
+}
+
+func (f columnFile) Name() string { return f.name }
+func (f columnFile) Width() int   { return f.width }
+
 const (
 	headerHeight = 2 // Header row + separator line
 )
@@ -26,9 +35,13 @@ type LinePanel struct {
 	scrollingDown bool      // Whether last navigation was downward
 
 	// Column state
-	columns []nt.Column
-	fields  []nt.Field
+	columns []nt.Column          // Column configuration
+	fields  []nt.Field           // Field metadata from store
 	colMap  map[string]nt.Column // Cached map of field name to column config
+
+	// Current piece (from Board)
+	currentField string
+	currentValue string
 
 	// Size
 	width  int
@@ -52,7 +65,7 @@ func New(ctx context.Context, columns []nt.Column, fields []nt.Field, count int,
 	// Todo: find a better approach
 	brd, _ := board.New(
 		[]board.Rank{board.NewRank([]board.Piece{piece.NewLabel("")})},
-		[]board.File{board.NewFile(piece.NewLabel(""))},
+		[]board.File{columnFile{}},
 		0, 0,
 	)
 	lp.board = brd
@@ -98,7 +111,10 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return lp, message.GetPageCmd(0, lp.PageSize())
 
 	case message.PositionMsg:
-		// Board cursor moved - calculate absolute row and send SelectedMsg
+		// Track current piece info
+		lp.currentField = msg.Field
+		lp.currentValue = msg.Value
+		// Calculate absolute row and send SelectedMsg
 		if msg.Rank >= 0 && msg.Rank < len(lp.lines) {
 			absoluteRow := lp.offset + msg.Rank
 			lineId := lp.lines[msg.Rank].Id
@@ -169,6 +185,15 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return lp, nil
 
+	case tea.KeyPressMsg:
+		if msg.String() == "c" {
+			return lp, lp.filterCmd()
+		}
+		// Pass other keys to board
+		var cmd tea.Cmd
+		lp.board, cmd = lp.board.Update(msg)
+		return lp, cmd
+
 	default:
 		// Pass everything else to board
 		var cmd tea.Cmd
@@ -200,6 +225,19 @@ func (lp *LinePanel) buildColMap() {
 	}
 }
 
+// filterCmd returns a command to open the filter dialog with the selected cell
+func (lp LinePanel) filterCmd() tea.Cmd {
+	if lp.currentField == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return message.OpenFilterMsg{
+			Field: lp.currentField,
+			Value: lp.currentValue,
+		}
+	}
+}
+
 func (lp LinePanel) View() tea.View {
 	return lp.board.View()
 }
@@ -213,15 +251,34 @@ func (lp LinePanel) buildRanks() []board.Rank {
 			if i >= len(lp.fields) {
 				continue
 			}
-			col, exists := lp.colMap[lp.fields[i].Name]
-			if exists && (col.Hidden || col.Demote) {
+			field := lp.fields[i]
+			col, exists := lp.colMap[field.Name]
+			if !exists || col.Hidden || col.Demote {
 				continue
 			}
-			pieces = append(pieces, piece.NewLabel(val.String()))
+			formatter := makeFormatter(field.Type, col.Format)
+			pieces = append(pieces, piece.NewValue(val, formatter))
 		}
 		ranks = append(ranks, board.NewRank(pieces))
 	}
 	return ranks
+}
+
+// makeFormatter creates a formatter function based on field type and format string
+// Todo: un-trainwreck
+func makeFormatter(fieldType, format string) func(nt.Value) string {
+	if format != "" && fieldType == "TIMESTAMP" {
+		return func(val nt.Value) string {
+			t, err := val.Time()
+			if err == nil {
+				return t.Format(format)
+			}
+			return val.String()
+		}
+	}
+	return func(v nt.Value) string {
+		return v.String()
+	}
 }
 
 // buildBoard converts current lines and columns into a Board
@@ -229,10 +286,10 @@ func (lp LinePanel) buildBoard() board.Board {
 	var files []board.File
 	for _, field := range lp.fields {
 		col, exists := lp.colMap[field.Name]
-		if exists && (col.Hidden || col.Demote) {
+		if !exists || col.Hidden || col.Demote {
 			continue
 		}
-		files = append(files, board.NewFile(piece.NewLabel(field.Name)))
+		files = append(files, columnFile{name: field.Name, width: col.Width})
 	}
 
 	ranks := lp.buildRanks()

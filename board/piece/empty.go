@@ -16,3 +16,7 @@ func (empty Empty) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 func (empty Empty) Render() string {
 	return ""
 }
+
+func (empty Empty) Value() string {
+	return ""
+}

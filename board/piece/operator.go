@@ -58,3 +58,7 @@ func (o Operator) Render() string {
 	}
 	return o.options[o.selected]
 }
+
+func (o Operator) Value() string {
+	return o.Selected()
+}

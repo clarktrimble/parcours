@@ -41,3 +41,7 @@ func (b Button) Label() string {
 func (b Button) Render() string {
 	return b.label
 }
+
+func (b Button) Value() string {
+	return b.label
+}

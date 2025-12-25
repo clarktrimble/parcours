@@ -1,6 +1,8 @@
 package board
 
 import (
+	"fmt"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2/table"
 	"github.com/pkg/errors"
@@ -9,8 +11,9 @@ import (
 	"parcours/style"
 )
 
-type Field interface {
-	String() string
+type File interface {
+	Name() string
+	Width() int
 }
 
 // MoveTo positions
@@ -20,6 +23,8 @@ const (
 	Top MoveTo = iota
 	Bottom
 )
+
+const gutter = 1 // space between columns
 
 // MoveToMsg signals cursor should move to a position
 type MoveToMsg struct {
@@ -35,6 +40,7 @@ type ReplaceMsg struct {
 type Piece interface {
 	Update(tea.Msg) (Piece, tea.Cmd)
 	Render() string
+	Value() string // Returns the raw value (for filtering, etc.) Todo: nt.Value ??
 }
 
 type Square struct {
@@ -57,15 +63,6 @@ func NewRank(pieces []Piece) Rank {
 	return Rank{squares: squares}
 }
 
-type File struct {
-	field Field
-}
-
-// NewFile creates a File with the given field.
-func NewFile(field Field) File {
-	return File{field: field}
-}
-
 // Board represents a 2D grid of squares organized into ranks (rows).
 // Board is designed for immutable use in bubbletea/Elm architecture:
 // - Navigation methods (MoveUp/Down/Left/Right) return new Board with updated position
@@ -79,35 +76,6 @@ type Board struct {
 	width    int // Number of files
 	height   int // Number of ranks
 	table    *table.Table
-}
-
-func (brd Board) validate() error {
-
-	if len(brd.ranks) == 0 || len(brd.files) == 0 {
-		return errors.Errorf("board requires non-zero ranks and files")
-	}
-
-	if len(brd.ranks) != brd.height {
-		return errors.Errorf("ranks length %d does not match height %d", len(brd.ranks), brd.height)
-	}
-	if len(brd.files) != brd.width {
-		return errors.Errorf("files length %d does not match width %d", len(brd.files), brd.width)
-	}
-
-	for i, r := range brd.ranks {
-		if len(r.squares) != brd.width {
-			return errors.Errorf("rank %d length does not equal width", i)
-		}
-	}
-
-	if brd.position.rank < 0 || brd.position.rank >= brd.height {
-		return errors.Errorf("rank %d out of bounds [0, %d)", brd.position.rank, brd.height)
-	}
-	if brd.position.file < 0 || brd.position.file >= brd.width {
-		return errors.Errorf("file %d out of bounds [0, %d)", brd.position.file, brd.width)
-	}
-
-	return nil
 }
 
 func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
@@ -203,11 +171,7 @@ func (brd Board) View() tea.View {
 	// Build headers from files
 	var headers []string
 	for _, file := range brd.files {
-		if file.field != nil {
-			headers = append(headers, file.field.String())
-		} else {
-			headers = append(headers, "")
-		}
+		headers = append(headers, fmt.Sprintf("%-*s", file.Width()+gutter, file.Name()))
 	}
 	if len(headers) > 0 {
 		brd.table.Headers(headers...)
@@ -217,8 +181,8 @@ func (brd Board) View() tea.View {
 	brd.table.ClearRows()
 	for _, rank := range brd.ranks {
 		var row []string
-		for _, square := range rank.squares {
-			row = append(row, square.piece.Render())
+		for i, square := range rank.squares {
+			row = append(row, truncate(square.piece.Render(), brd.files[i].Width()))
 		}
 		brd.table.Row(row...)
 	}
@@ -306,9 +270,53 @@ type position struct {
 	file int
 }
 
-// positionCmd returns a command that sends the current position
-func (brd Board) positionCmd() tea.Cmd {
-	return func() tea.Msg {
-		return message.PositionMsg{Rank: brd.position.rank, File: brd.position.file}
+func truncate(s string, width int) string {
+	if width <= 0 {
+		return s
 	}
+	runes := []rune(s)
+	if len(runes) <= width {
+		return s
+	}
+	return string(runes[:width-1]) + style.MutedStyle.Render("…")
+}
+
+// positionCmd returns a command that sends the current position and cell info
+func (brd Board) positionCmd() tea.Cmd {
+	pos := message.PositionMsg{
+		Rank:  brd.position.rank,
+		File:  brd.position.file,
+		Field: brd.files[brd.position.file].Name(),
+		Value: brd.ranks[brd.position.rank].squares[brd.position.file].piece.Value(),
+	}
+	return func() tea.Msg { return pos }
+}
+
+func (brd Board) validate() error {
+
+	if len(brd.ranks) == 0 || len(brd.files) == 0 {
+		return errors.Errorf("board requires non-zero ranks and files")
+	}
+
+	if len(brd.ranks) != brd.height {
+		return errors.Errorf("ranks length %d does not match height %d", len(brd.ranks), brd.height)
+	}
+	if len(brd.files) != brd.width {
+		return errors.Errorf("files length %d does not match width %d", len(brd.files), brd.width)
+	}
+
+	for i, r := range brd.ranks {
+		if len(r.squares) != brd.width {
+			return errors.Errorf("rank %d length does not equal width", i)
+		}
+	}
+
+	if brd.position.rank < 0 || brd.position.rank >= brd.height {
+		return errors.Errorf("rank %d out of bounds [0, %d)", brd.position.rank, brd.height)
+	}
+	if brd.position.file < 0 || brd.position.file >= brd.width {
+		return errors.Errorf("file %d out of bounds [0, %d)", brd.position.file, brd.width)
+	}
+
+	return nil
 }
