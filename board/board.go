@@ -49,6 +49,13 @@ type Piece interface {
 	Value() string // Returns the raw value (for filtering, etc.) Todo: nt.Value ??
 }
 
+// PieceMsg is the interface for messages from interactive pieces.
+// Board injects position via SetPosition before returning the cmd.
+type PieceMsg interface {
+	IsPieceMsg()
+	SetPosition(rank, file int)
+}
+
 type Square struct {
 	piece    Piece
 	position position // Todo: use/lose
@@ -102,6 +109,7 @@ func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
 		table:    tbl,
 	}
 
+	board.setSquarePositions()
 	err = board.validate()
 	return
 }
@@ -109,6 +117,7 @@ func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
 func (brd Board) Replace(ranks []Rank) (board Board, err error) {
 
 	brd.ranks = ranks
+	brd.setSquarePositions()
 
 	err = brd.validate()
 	if err != nil {
@@ -176,6 +185,19 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// event loop, but NOT safe if you keep multiple Board instances alive simultaneously
 	// (e.g., for undo/redo or snapshots). If that's needed, clone ranks before mutation.
 	brd.ranks[brd.position.rank].squares[brd.position.file].piece = updatedPiece
+
+	// Wrap cmd to inject position into PieceMsg
+	if cmd != nil {
+		pos := square.position
+		originalCmd := cmd
+		cmd = func() tea.Msg {
+			msg := originalCmd()
+			if pm, ok := msg.(PieceMsg); ok {
+				pm.SetPosition(pos.rank, pos.file)
+			}
+			return msg
+		}
+	}
 
 	return brd, cmd
 }
@@ -365,6 +387,14 @@ func (brd Board) adjustFileOffset() int {
 	}
 
 	return brd.fileOffset
+}
+
+func (brd *Board) setSquarePositions() {
+	for r := range brd.ranks {
+		for f := range brd.ranks[r].squares {
+			brd.ranks[r].squares[f].position = position{rank: r, file: f}
+		}
+	}
 }
 
 func (brd Board) validate() error {

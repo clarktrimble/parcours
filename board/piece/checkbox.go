@@ -20,6 +20,9 @@ func (c Checkbox) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 	case tea.KeyPressMsg:
 		if msg.String() == "t" || msg.String() == " " {
 			c.checked = !c.checked
+			return c, func() tea.Msg {
+				return &CheckedMsg{Checked: c.checked}
+			}
 		}
 	}
 	return c, nil

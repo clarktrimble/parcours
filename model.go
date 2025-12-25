@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"parcours/board"
 	"parcours/detail"
 	nt "parcours/entity"
 	"parcours/filter"
@@ -85,7 +86,7 @@ func NewModel(ctx context.Context, store Store, lgr nt.Logger) (model Model, err
 		logger:      lgr,
 		tablePanel:  linesPanel,
 		detailPanel: detail.NewDetailPanel(ctx, layout.Columns, lgr),
-		filterPanel: filter.NewFilterPanel(ctx, lgr),
+		filterPanel: filter.NewFilterPanelToo(ctx, lgr),
 		active:      tableActive,
 	}
 
@@ -124,6 +125,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case filter.FilterMsg:
 		m.filterPanel, cmd = m.filterPanel.Update(msg)
+		return m, cmd
+
+	case board.PieceMsg:
+		// Route piece messages to active panel
+		switch m.active {
+		case filterActive:
+			m.filterPanel, cmd = m.filterPanel.Update(msg)
+		case tableActive:
+			m.tablePanel, cmd = m.tablePanel.Update(msg)
+		}
 		return m, cmd
 
 	case message.SetFilterMsg:

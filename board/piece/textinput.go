@@ -25,6 +25,7 @@ func NewTextInput(value string, maxLength int) TextInput {
 }
 
 func (t TextInput) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
+	oldValue := t.value
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -55,6 +56,12 @@ func (t TextInput) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 				t.value = t.value[:t.cursor] + msg.String() + t.value[t.cursor:]
 				t.cursor++
 			}
+		}
+	}
+	// Only send message if value changed
+	if t.value != oldValue {
+		return t, func() tea.Msg {
+			return &ValueChangedMsg{Value: t.value}
 		}
 	}
 	return t, nil

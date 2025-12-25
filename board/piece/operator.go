@@ -31,14 +31,25 @@ func (o Operator) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 			if o.selected < 0 {
 				o.selected = len(o.options) - 1
 			}
+			return o, o.changedCmd()
 		case "right", "l":
 			o.selected++
 			if o.selected >= len(o.options) {
 				o.selected = 0
 			}
+			return o, o.changedCmd()
 		}
 	}
 	return o, nil
+}
+
+func (o Operator) changedCmd() tea.Cmd {
+	return func() tea.Msg {
+		return &OperatorChangedMsg{
+			Selected: o.Selected(),
+			Index:    o.selected,
+		}
+	}
 }
 
 func (o Operator) Selected() string {
