@@ -61,7 +61,7 @@ func (t TextInput) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 	// Only send message if value changed
 	if t.value != oldValue {
 		return t, func() tea.Msg {
-			return &ValueChangedMsg{Value: t.value}
+			return ValueChangedMsg{Value: t.value}
 		}
 	}
 	return t, nil

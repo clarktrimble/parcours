@@ -97,9 +97,12 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// If replace failed (dimensions changed), rebuild board
 		if cmd != nil {
 			// Todo: explicitly signal rather than error cmd hax
-			lp.board = lp.buildBoard()
+			if _, isErr := cmd().(message.ErrorMsg); isErr {
+				lp.board = lp.buildBoard()
+				cmd = nil
+			}
 		}
-		return lp, nil
+		return lp, cmd
 
 	case ColumnsMsg:
 		lp.columns = msg.Columns

@@ -14,6 +14,7 @@ func RenderFooter(current, total int, filename string, width int) string {
 
 	left := filename
 	right := fmt.Sprintf("%d/%d", current+1, total)
+	// Todo: I can has unfiltered total total?
 
 	// Calculate padding
 	padding := width - lipgloss.Width(left) - lipgloss.Width(right)

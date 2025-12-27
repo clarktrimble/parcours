@@ -4,9 +4,9 @@ import "parcours/board"
 
 // Ensure messages implement board.PieceMsg
 var (
-	_ board.PieceMsg = (*CheckedMsg)(nil)
-	_ board.PieceMsg = (*OperatorChangedMsg)(nil)
-	_ board.PieceMsg = (*ValueChangedMsg)(nil)
+	_ board.PieceMsg = CheckedMsg{}
+	_ board.PieceMsg = OperatorChangedMsg{}
+	_ board.PieceMsg = ValueChangedMsg{}
 )
 
 // CheckedMsg is sent when a checkbox is toggled
@@ -17,9 +17,10 @@ type CheckedMsg struct {
 }
 
 func (CheckedMsg) IsPieceMsg() {}
-func (m *CheckedMsg) SetPosition(rank, file int) {
+func (m CheckedMsg) SetPosition(rank, file int) board.PieceMsg {
 	m.Rank = rank
 	m.File = file
+	return m
 }
 
 // OperatorChangedMsg is sent when an operator selection changes
@@ -31,9 +32,10 @@ type OperatorChangedMsg struct {
 }
 
 func (OperatorChangedMsg) IsPieceMsg() {}
-func (m *OperatorChangedMsg) SetPosition(rank, file int) {
+func (m OperatorChangedMsg) SetPosition(rank, file int) board.PieceMsg {
 	m.Rank = rank
 	m.File = file
+	return m
 }
 
 // ValueChangedMsg is sent when a text input value changes
@@ -44,7 +46,8 @@ type ValueChangedMsg struct {
 }
 
 func (ValueChangedMsg) IsPieceMsg() {}
-func (m *ValueChangedMsg) SetPosition(rank, file int) {
+func (m ValueChangedMsg) SetPosition(rank, file int) board.PieceMsg {
 	m.Rank = rank
 	m.File = file
+	return m
 }

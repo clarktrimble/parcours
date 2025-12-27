@@ -12,7 +12,6 @@ import (
 	"parcours/board/piece"
 	nt "parcours/entity"
 	"parcours/message"
-	"parcours/style"
 )
 
 // FilterPanelToo displays a modal dialog for editing filters using Board
@@ -20,8 +19,12 @@ type FilterPanelToo struct {
 	board   board.Board
 	filters []nt.Filter
 
-	width  int
-	height int
+	width             int
+	height            int
+	selectedFilterIdx int
+
+	// Snapshot for cancel support - restored on esc
+	filtersSnapshot []nt.Filter
 
 	ctx    context.Context
 	logger nt.Logger
@@ -68,14 +71,32 @@ func (pnl FilterPanelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case message.OpenFilterMsg:
-		// Add new filter from cell selection
+		// Start from committed state
+		pnl.filters = make([]nt.Filter, len(pnl.filtersSnapshot))
+		copy(pnl.filters, pnl.filtersSnapshot)
+
+		// Check for duplicate filter (same field, value, op)
 		newFilter := nt.Filter{
-			Op:      nt.Eq,
+			Op:      nt.Ne, // Default to != ("I don't want these")
 			Field:   msg.Field,
 			Value:   msg.Value,
 			Enabled: true,
 		}
-		pnl.filters = append(pnl.filters, newFilter)
+
+		isDuplicate := false
+		for i, f := range pnl.filters {
+			if f.Field == newFilter.Field && f.Value == newFilter.Value && f.Op == newFilter.Op {
+				isDuplicate = true
+				pnl.selectedFilterIdx = i
+				break
+			}
+		}
+
+		if !isDuplicate {
+			pnl.filters = append(pnl.filters, newFilter)
+			pnl.selectedFilterIdx = len(pnl.filters) - 1 // Position on new filter
+		}
+
 		pnl.board = pnl.buildBoard()
 		return pnl, nil
 
@@ -106,11 +127,27 @@ func (pnl FilterPanelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return pnl, nil
 
+	case message.PositionMsg:
+		pnl.selectedFilterIdx = msg.Rank
+		return pnl, nil
+
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "p":
-			// Apply all enabled filters
+			// Commit working state to snapshot and apply
+			pnl.filtersSnapshot = pnl.filters
 			return pnl, pnl.applyCmd()
+		case "delete":
+			// Delete selected filter
+			if len(pnl.filters) > 0 && pnl.selectedFilterIdx < len(pnl.filters) {
+				pnl.filters = append(pnl.filters[:pnl.selectedFilterIdx], pnl.filters[pnl.selectedFilterIdx+1:]...)
+				// Adjust selection if we deleted the last item
+				if pnl.selectedFilterIdx >= len(pnl.filters) && pnl.selectedFilterIdx > 0 {
+					pnl.selectedFilterIdx--
+				}
+				pnl.board = pnl.buildBoard()
+			}
+			return pnl, nil
 		default:
 			// Pass to board
 			var cmd tea.Cmd
@@ -124,9 +161,6 @@ func (pnl FilterPanelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (pnl FilterPanelToo) View() tea.View {
-	// Help text
-	helpText := "t: toggle  ←→: change op  p: apply  Esc: cancel"
-
 	// Create a bordered box
 	dialogStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -137,10 +171,7 @@ func (pnl FilterPanelToo) View() tea.View {
 	// Get board content as string via fmt
 	boardContent := fmt.Sprintf("%s", pnl.board.View().Content)
 
-	// Combine board view with help
-	dialogContent := fmt.Sprintf("Filters:\n%s\n\n%s",
-		boardContent,
-		style.MutedStyle.Render(helpText))
+	dialogContent := fmt.Sprintf("Filters:\n%s", boardContent)
 
 	dialog := dialogStyle.Render(dialogContent)
 
@@ -232,7 +263,7 @@ func (pnl FilterPanelToo) buildBoard() board.Board {
 		filterFile{name: "Value", width: 30}, // value
 	}
 
-	brd, _ := board.New(ranks, files, 0, 0)
+	brd, _ := board.New(ranks, files, pnl.selectedFilterIdx, 0) // Todo: handle error
 	return brd
 }
 

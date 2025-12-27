@@ -53,12 +53,12 @@ type Piece interface {
 // Board injects position via SetPosition before returning the cmd.
 type PieceMsg interface {
 	IsPieceMsg()
-	SetPosition(rank, file int)
+	SetPosition(rank, file int) PieceMsg
 }
 
 type Square struct {
 	piece    Piece
-	position position // Todo: use/lose
+	position position
 }
 
 type Rank struct {
@@ -93,6 +93,9 @@ type Board struct {
 	// Viewport
 	viewportWidth int // Display width in characters
 	fileOffset    int // Index of leftmost visible file (for horizontal scrolling)
+
+	// Edit mode - when true, keys go to focused piece instead of nav
+	editMode bool
 }
 
 func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
@@ -146,7 +149,7 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return message.ErrorMsg{Err: err}
 			}
 		}
-		return newBrd, nil
+		return newBrd, newBrd.positionCmd()
 	case MoveToMsg:
 		switch msg.MoveTo {
 		case Top:
@@ -156,7 +159,21 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return brd, brd.positionCmd()
 	case tea.KeyPressMsg:
+		if brd.editMode {
+			// Edit mode: Enter exits, everything else goes to piece
+			if msg.String() == "enter" {
+				brd.editMode = false
+				return brd, nil
+			}
+			return brd.updateFocusedPiece(msg)
+		}
+
+		// Nav mode
 		switch msg.String() {
+		case "i":
+			// Todo: editMode only makes sense for textinput
+			brd.editMode = true
+			return brd, nil
 		case "up", "k":
 			return brd.moveUp()
 		case "down", "j":
@@ -176,7 +193,12 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Pass message to the focused square
+	// Non-key messages still go to focused piece
+	return brd.updateFocusedPiece(msg)
+}
+
+// updateFocusedPiece passes a message to the focused piece and handles cmd wrapping
+func (brd Board) updateFocusedPiece(msg tea.Msg) (Board, tea.Cmd) {
 	square := brd.ranks[brd.position.rank].squares[brd.position.file]
 	updatedPiece, cmd := square.piece.Update(msg)
 
@@ -193,7 +215,7 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = func() tea.Msg {
 			msg := originalCmd()
 			if pm, ok := msg.(PieceMsg); ok {
-				pm.SetPosition(pos.rank, pos.file)
+				return pm.SetPosition(pos.rank, pos.file)
 			}
 			return msg
 		}
@@ -325,6 +347,9 @@ func truncate(s string, width int) string {
 }
 
 // positionCmd returns a command that sends the current position and cell info
+// Todo: consider "delete" etc alternative where board handles certain sensible keys
+// and emits a cmd/msg with relevant data, this might be workable??
+// the benefit would be not caching this elsewhere
 func (brd Board) positionCmd() tea.Cmd {
 	pos := message.PositionMsg{
 		Rank:  brd.position.rank,

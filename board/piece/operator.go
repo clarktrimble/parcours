@@ -26,13 +26,13 @@ func (o Operator) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
-		case "left", "h":
+		case "shift+tab":
 			o.selected--
 			if o.selected < 0 {
 				o.selected = len(o.options) - 1
 			}
 			return o, o.changedCmd()
-		case "right", "l":
+		case "tab":
 			o.selected++
 			if o.selected >= len(o.options) {
 				o.selected = 0
@@ -45,7 +45,7 @@ func (o Operator) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 
 func (o Operator) changedCmd() tea.Cmd {
 	return func() tea.Msg {
-		return &OperatorChangedMsg{
+		return OperatorChangedMsg{
 			Selected: o.Selected(),
 			Index:    o.selected,
 		}

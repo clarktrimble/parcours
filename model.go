@@ -201,6 +201,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.active = detailActive
 				return m, m.getLine(m.selectedId)
 			}
+			fallthrough // Todo: restructure properly, maybe?
 
 		default:
 			switch m.active {
