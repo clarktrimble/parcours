@@ -10,7 +10,7 @@ import (
 	"parcours/board"
 	"parcours/detail"
 	nt "parcours/entity"
-	"parcours/filter"
+	"parcours/filterpanel"
 	"parcours/linepanel"
 	"parcours/message"
 	"parcours/style"
@@ -86,7 +86,7 @@ func NewModel(ctx context.Context, store Store, lgr nt.Logger) (model Model, err
 		logger:      lgr,
 		tablePanel:  linesPanel,
 		detailPanel: detail.NewDetailPanel(ctx, layout.Columns, lgr),
-		filterPanel: filter.NewFilterPanelToo(ctx, lgr),
+		filterPanel: filterpanel.New(ctx, lgr),
 		active:      tableActive,
 	}
 
@@ -123,7 +123,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.detailPanel, cmd = m.detailPanel.Update(msg)
 		return m, cmd
 
-	case filter.FilterMsg:
+	case filterpanel.FilterMsg:
 		m.filterPanel, cmd = m.filterPanel.Update(msg)
 		return m, cmd
 
@@ -238,7 +238,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 
 		// Todo: use filter size, or lose
-		m.filterPanel, cmd = m.filterPanel.Update(filter.SizeMsg{
+		m.filterPanel, cmd = m.filterPanel.Update(filterpanel.SizeMsg{
 			Width:  msg.Width,
 			Height: panelHeight,
 		})

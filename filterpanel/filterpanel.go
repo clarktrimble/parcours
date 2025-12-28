@@ -1,4 +1,4 @@
-package filter
+package filterpanel
 
 import (
 	"context"
@@ -14,8 +14,8 @@ import (
 	"parcours/message"
 )
 
-// FilterPanelToo displays a modal dialog for editing filters using Board
-type FilterPanelToo struct {
+// FilterPanel displays a modal dialog for editing filters using Board
+type FilterPanel struct {
 	board   board.Board
 	filters []nt.Filter
 
@@ -54,8 +54,8 @@ var opFromString = map[string]nt.FilterOp{
 	"<=":       nt.Lte,
 }
 
-func NewFilterPanelToo(ctx context.Context, lgr nt.Logger) FilterPanelToo {
-	pnl := FilterPanelToo{
+func New(ctx context.Context, lgr nt.Logger) FilterPanel {
+	pnl := FilterPanel{
 		ctx:    ctx,
 		logger: lgr,
 	}
@@ -63,11 +63,11 @@ func NewFilterPanelToo(ctx context.Context, lgr nt.Logger) FilterPanelToo {
 	return pnl
 }
 
-func (pnl FilterPanelToo) Init() tea.Cmd {
+func (pnl FilterPanel) Init() tea.Cmd {
 	return nil
 }
 
-func (pnl FilterPanelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case message.OpenFilterMsg:
@@ -160,7 +160,7 @@ func (pnl FilterPanelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return pnl, nil
 }
 
-func (pnl FilterPanelToo) View() tea.View {
+func (pnl FilterPanel) View() tea.View {
 	// Create a bordered box
 	dialogStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -201,7 +201,7 @@ func (pnl FilterPanelToo) View() tea.View {
 	return tea.NewView(dialogLayer)
 }
 
-func (pnl FilterPanelToo) applyCmd() tea.Cmd {
+func (pnl FilterPanel) applyCmd() tea.Cmd {
 	var enabledFilters []nt.Filter
 	for _, f := range pnl.filters {
 		if f.Enabled {
@@ -226,7 +226,7 @@ func (pnl FilterPanelToo) applyCmd() tea.Cmd {
 	}
 }
 
-func (pnl FilterPanelToo) buildBoard() board.Board {
+func (pnl FilterPanel) buildBoard() board.Board {
 	if len(pnl.filters) == 0 {
 		// Empty board with placeholder
 		brd, _ := board.New(
@@ -257,7 +257,7 @@ func (pnl FilterPanelToo) buildBoard() board.Board {
 	}
 
 	files := []board.File{
-		filterFile{name: "", width: 3},      // checkbox
+		filterFile{name: "", width: 3},       // checkbox
 		filterFile{name: "Field", width: 15}, // field name
 		filterFile{name: "Op", width: 10},    // operator
 		filterFile{name: "Value", width: 30}, // value

@@ -1,4 +1,4 @@
-package filter
+package filterpanel
 
 type FilterMsg interface {
 	isFilterMsg()
