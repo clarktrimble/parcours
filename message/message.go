@@ -35,15 +35,6 @@ type CountMsg struct {
 	Count int
 }
 
-// PositionMsg contains the board cursor position and selected cell info
-// Todo: likely this belongs to Board pkg?
-type PositionMsg struct {
-	Rank  int    // Row position within board (0-indexed)
-	File  int    // Column position within board (0-indexed)
-	Field string // Field name from the column header
-	Value string // Cell value from the piece
-}
-
 // SelectedMsg contains row and id of selected line
 type SelectedMsg struct {
 	Row int
@@ -61,17 +52,3 @@ type SetFilterMsg struct {
 	Filter nt.Filter
 }
 
-// Navigation directions
-const (
-	NavDown     = "down"
-	NavUp       = "up"
-	NavPageDown = "pagedown"
-	NavPageUp   = "pageup"
-	NavTop      = "top"
-	NavBottom   = "bottom"
-)
-
-// NavMsg signals navigation that hit a boundary
-type NavMsg struct {
-	Direction string
-}

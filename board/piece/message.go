@@ -17,11 +17,6 @@ type CheckedMsg struct {
 }
 
 func (CheckedMsg) IsPieceMsg() {}
-func (m CheckedMsg) SetPosition(rank, file int) board.PieceMsg {
-	m.Rank = rank
-	m.File = file
-	return m
-}
 
 // OperatorChangedMsg is sent when an operator selection changes
 type OperatorChangedMsg struct {
@@ -32,11 +27,6 @@ type OperatorChangedMsg struct {
 }
 
 func (OperatorChangedMsg) IsPieceMsg() {}
-func (m OperatorChangedMsg) SetPosition(rank, file int) board.PieceMsg {
-	m.Rank = rank
-	m.File = file
-	return m
-}
 
 // ValueChangedMsg is sent when a text input value changes
 type ValueChangedMsg struct {
@@ -46,8 +36,3 @@ type ValueChangedMsg struct {
 }
 
 func (ValueChangedMsg) IsPieceMsg() {}
-func (m ValueChangedMsg) SetPosition(rank, file int) board.PieceMsg {
-	m.Rank = rank
-	m.File = file
-	return m
-}

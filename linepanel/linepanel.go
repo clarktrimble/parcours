@@ -115,7 +115,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lp.offset = 0
 		return lp, message.GetPageCmd(0, lp.PageSize())
 
-	case message.PositionMsg:
+	case board.SquareMsg:
 		// Track current piece info
 		lp.currentField = msg.Field
 		lp.currentValue = msg.Value
@@ -129,12 +129,12 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return lp, nil
 
-	case message.NavMsg:
+	case board.NavMsg:
 		// Board hit a boundary - scroll the dataset
 		pageSize := lp.PageSize()
 		lp.scrollingDown = false // default to upward/top positioning
 		switch msg.Direction {
-		case message.NavDown:
+		case board.NavDown:
 			// Scroll down one line
 			if lp.offset+pageSize < lp.total {
 				lp.offset++
@@ -142,13 +142,13 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				lp.ensureFullPage(pageSize)
 				return lp, message.GetPageCmd(lp.offset, pageSize)
 			}
-		case message.NavUp:
+		case board.NavUp:
 			// Scroll up one line
 			if lp.offset > 0 {
 				lp.offset--
 				return lp, message.GetPageCmd(lp.offset, pageSize)
 			}
-		case message.NavPageDown:
+		case board.NavPageDown:
 			// Jump to next page
 			if lp.offset+pageSize < lp.total {
 				lp.offset += pageSize
@@ -160,7 +160,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			lp.board, cmd = lp.board.Update(board.MoveToMsg{MoveTo: board.Bottom})
 			return lp, cmd
-		case message.NavPageUp:
+		case board.NavPageUp:
 			// Jump to previous page
 			if lp.offset > 0 {
 				lp.offset -= pageSize
@@ -173,13 +173,13 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			lp.board, cmd = lp.board.Update(board.MoveToMsg{MoveTo: board.Top})
 			return lp, cmd
-		case message.NavTop:
+		case board.NavTop:
 			// Jump to first page
 			if lp.offset != 0 {
 				lp.offset = 0
 				return lp, message.GetPageCmd(0, pageSize)
 			}
-		case message.NavBottom:
+		case board.NavBottom:
 			// Jump to last page
 			newOffset := max(0, lp.total-pageSize)
 			if lp.offset != newOffset {

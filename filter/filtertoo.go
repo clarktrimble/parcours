@@ -127,7 +127,7 @@ func (pnl FilterPanelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return pnl, nil
 
-	case message.PositionMsg:
+	case board.PositionMsg:
 		pnl.selectedFilterIdx = msg.Rank
 		return pnl, nil
 

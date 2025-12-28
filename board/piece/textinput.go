@@ -11,6 +11,8 @@ type TextInput struct {
 	value     string
 	cursor    int
 	maxLength int
+	rank      int
+	file      int
 }
 
 func NewTextInput(value string, maxLength int) TextInput {
@@ -25,6 +27,13 @@ func NewTextInput(value string, maxLength int) TextInput {
 }
 
 func (t TextInput) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
+	switch msg := msg.(type) {
+	case board.PositionMsg:
+		t.rank = msg.Rank
+		t.file = msg.File
+		return t, nil
+	}
+
 	oldValue := t.value
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
@@ -61,12 +70,11 @@ func (t TextInput) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 	// Only send message if value changed
 	if t.value != oldValue {
 		return t, func() tea.Msg {
-			return ValueChangedMsg{Value: t.value}
+			return ValueChangedMsg{Rank: t.rank, File: t.file, Value: t.value}
 		}
 	}
 	return t, nil
 }
-
 
 func (t TextInput) Value() string {
 	return t.value

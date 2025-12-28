@@ -11,35 +11,13 @@ import (
 	"parcours/style"
 )
 
+const (
+	gutter = 1 // space between columns
+)
+
 type File interface {
 	Name() string
 	Width() int
-}
-
-// MoveTo positions
-type MoveTo int
-
-const (
-	Top MoveTo = iota
-	Bottom
-)
-
-const gutter = 1 // space between columns
-
-// MoveToMsg signals cursor should move to a position
-type MoveToMsg struct {
-	MoveTo MoveTo
-}
-
-// SizeMsg tells the board its display size
-type SizeMsg struct {
-	Width  int
-	Height int
-}
-
-// ReplaceMsg signals the board should replace its ranks
-type ReplaceMsg struct {
-	Ranks []Rank
 }
 
 // Piece represents a board piece that can update and render itself.
@@ -50,15 +28,12 @@ type Piece interface {
 }
 
 // PieceMsg is the interface for messages from interactive pieces.
-// Board injects position via SetPosition before returning the cmd.
 type PieceMsg interface {
 	IsPieceMsg()
-	SetPosition(rank, file int) PieceMsg
 }
 
 type Square struct {
-	piece    Piece
-	position position
+	piece Piece
 }
 
 type Rank struct {
@@ -98,6 +73,7 @@ type Board struct {
 	editMode bool
 }
 
+// Todo: pass style config instead of importing parcours/style
 func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
 
 	tbl := table.New()
@@ -112,23 +88,35 @@ func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
 		table:    tbl,
 	}
 
-	board.setSquarePositions()
 	err = board.validate()
+	if err != nil {
+		return
+	}
+	board.setPositions()
 	return
 }
 
 func (brd Board) Replace(ranks []Rank) (board Board, err error) {
 
 	brd.ranks = ranks
-	brd.setSquarePositions()
-
 	err = brd.validate()
 	if err != nil {
 		return
 	}
 
+	brd.setPositions()
 	board = brd
 	return
+}
+
+func (brd *Board) setPositions() {
+	for r, rank := range brd.ranks {
+		for f := range rank.squares {
+			piece := rank.squares[f].piece
+			updated, _ := piece.Update(PositionMsg{Rank: r, File: f})
+			brd.ranks[r].squares[f].piece = updated
+		}
+	}
 }
 
 func (brd Board) Init() tea.Cmd {
@@ -165,7 +153,7 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				brd.editMode = false
 				return brd, nil
 			}
-			return brd.updateFocusedPiece(msg)
+			return brd.updatePiece(msg)
 		}
 
 		// Nav mode
@@ -194,32 +182,20 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Non-key messages still go to focused piece
-	return brd.updateFocusedPiece(msg)
+	return brd.updatePiece(msg)
 }
 
-// updateFocusedPiece passes a message to the focused piece and handles cmd wrapping
-func (brd Board) updateFocusedPiece(msg tea.Msg) (Board, tea.Cmd) {
-	square := brd.ranks[brd.position.rank].squares[brd.position.file]
-	updatedPiece, cmd := square.piece.Update(msg)
+// updatePiece passes a message to the focused piece
+func (brd Board) updatePiece(msg tea.Msg) (Board, tea.Cmd) {
 
-	// Update the square with the new piece
-	// Note: This mutates the shared ranks slice. Safe for bubbletea's single-model
-	// event loop, but NOT safe if you keep multiple Board instances alive simultaneously
-	// (e.g., for undo/redo or snapshots). If that's needed, clone ranks before mutation.
-	brd.ranks[brd.position.rank].squares[brd.position.file].piece = updatedPiece
+	r := brd.position.rank
+	f := brd.position.file
 
-	// Wrap cmd to inject position into PieceMsg
-	if cmd != nil {
-		pos := square.position
-		originalCmd := cmd
-		cmd = func() tea.Msg {
-			msg := originalCmd()
-			if pm, ok := msg.(PieceMsg); ok {
-				return pm.SetPosition(pos.rank, pos.file)
-			}
-			return msg
-		}
-	}
+	// Note: mutating shared ranks slice!!
+
+	square := brd.ranks[r].squares[f]
+	piece, cmd := square.piece.Update(msg)
+	brd.ranks[r].squares[f].piece = piece
 
 	return brd, cmd
 }
@@ -263,7 +239,7 @@ func (brd Board) moveUp() (Board, tea.Cmd) {
 	}
 	// Hit top edge
 	return brd, func() tea.Msg {
-		return message.NavMsg{Direction: message.NavUp}
+		return NavMsg{Direction: NavUp}
 	}
 }
 
@@ -274,7 +250,7 @@ func (brd Board) moveDown() (Board, tea.Cmd) {
 	}
 	// Hit bottom edge
 	return brd, func() tea.Msg {
-		return message.NavMsg{Direction: message.NavDown}
+		return NavMsg{Direction: NavDown}
 	}
 }
 
@@ -301,7 +277,7 @@ func (brd Board) moveTop() (Board, tea.Cmd) {
 	brd.position.rank = 0
 	return brd, tea.Batch(
 		brd.positionCmd(),
-		func() tea.Msg { return message.NavMsg{Direction: message.NavTop} },
+		func() tea.Msg { return NavMsg{Direction: NavTop} },
 	)
 }
 
@@ -310,21 +286,21 @@ func (brd Board) moveBottom() (Board, tea.Cmd) {
 	brd.position.rank = brd.height - 1
 	return brd, tea.Batch(
 		brd.positionCmd(),
-		func() tea.Msg { return message.NavMsg{Direction: message.NavBottom} },
+		func() tea.Msg { return NavMsg{Direction: NavBottom} },
 	)
 }
 
 func (brd Board) movePageUp() (Board, tea.Cmd) {
 	// Page up: request previous page, preserve cursor position
 	return brd, func() tea.Msg {
-		return message.NavMsg{Direction: message.NavPageUp}
+		return NavMsg{Direction: NavPageUp}
 	}
 }
 
 func (brd Board) movePageDown() (Board, tea.Cmd) {
 	// Page down: request next page, preserve cursor position
 	return brd, func() tea.Msg {
-		return message.NavMsg{Direction: message.NavPageDown}
+		return NavMsg{Direction: NavPageDown}
 	}
 }
 
@@ -351,7 +327,7 @@ func truncate(s string, width int) string {
 // and emits a cmd/msg with relevant data, this might be workable??
 // the benefit would be not caching this elsewhere
 func (brd Board) positionCmd() tea.Cmd {
-	pos := message.PositionMsg{
+	pos := SquareMsg{
 		Rank:  brd.position.rank,
 		File:  brd.position.file,
 		Field: brd.files[brd.position.file].Name(),
@@ -412,14 +388,6 @@ func (brd Board) adjustFileOffset() int {
 	}
 
 	return brd.fileOffset
-}
-
-func (brd *Board) setSquarePositions() {
-	for r := range brd.ranks {
-		for f := range brd.ranks[r].squares {
-			brd.ranks[r].squares[f].position = position{rank: r, file: f}
-		}
-	}
 }
 
 func (brd Board) validate() error {

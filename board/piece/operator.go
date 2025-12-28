@@ -10,6 +10,8 @@ import (
 type Operator struct {
 	options  []string
 	selected int
+	rank     int
+	file     int
 }
 
 func NewOperator(options []string, selected int) Operator {
@@ -24,6 +26,10 @@ func NewOperator(options []string, selected int) Operator {
 
 func (o Operator) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 	switch msg := msg.(type) {
+	case board.PositionMsg:
+		o.rank = msg.Rank
+		o.file = msg.File
+		return o, nil
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "shift+tab":
@@ -46,6 +52,8 @@ func (o Operator) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 func (o Operator) changedCmd() tea.Cmd {
 	return func() tea.Msg {
 		return OperatorChangedMsg{
+			Rank:     o.rank,
+			File:     o.file,
 			Selected: o.Selected(),
 			Index:    o.selected,
 		}
