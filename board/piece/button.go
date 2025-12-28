@@ -6,6 +6,8 @@ import (
 	"parcours/board"
 )
 
+var _ board.Piece = Button{}
+
 // PressedMsg is sent when a button is pressed
 type PressedMsg struct{}
 
@@ -36,6 +38,10 @@ func (b Button) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 
 func (b Button) Label() string {
 	return b.label
+}
+
+func (b Button) View() tea.View {
+	return tea.NewView(b.label)
 }
 
 func (b Button) Render() string {

@@ -2,9 +2,12 @@ package board
 
 import (
 	"fmt"
+	"image"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2/table"
+	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/pkg/errors"
 
 	"parcours/message"
@@ -23,8 +26,9 @@ type File interface {
 // Piece represents a board piece that can update and render itself.
 type Piece interface {
 	Update(tea.Msg) (Piece, tea.Cmd)
-	Render() string
-	Value() string // Returns the raw value (for filtering, etc.) Todo: nt.Value ??
+	View() tea.View
+	Render() string // Deprecated: use View() instead
+	Value() string  // Returns the raw value (for filtering, etc.) Todo: nt.Value ??
 }
 
 // PieceMsg is the interface for messages from interactive pieces.
@@ -63,11 +67,12 @@ type Board struct {
 	position position
 	width    int // Number of files
 	height   int // Number of ranks
-	table    *table.Table
 
 	// Viewport
-	viewportWidth int // Display width in characters
-	fileOffset    int // Index of leftmost visible file (for horizontal scrolling)
+	viewportWidth  int
+	viewportHeight int
+	initialized    bool
+	fileOffset     int // Index of leftmost visible file (for horizontal scrolling)
 
 	// Edit mode - when true, keys go to focused piece instead of nav
 	editMode bool
@@ -76,16 +81,12 @@ type Board struct {
 // Todo: pass style config instead of importing parcours/style
 func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
 
-	tbl := table.New()
-	style.StyleTable(tbl)
-
 	board = Board{
 		ranks:    ranks,
 		files:    files,
 		width:    len(files),
 		height:   len(ranks),
 		position: position{file: file, rank: rank},
-		table:    tbl,
 	}
 
 	err = board.validate()
@@ -128,6 +129,8 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case SizeMsg:
 		brd.viewportWidth = msg.Width
+		brd.viewportHeight = msg.Height
+		brd.initialized = true
 		brd.fileOffset = brd.adjustFileOffset()
 		return brd, nil
 	case ReplaceMsg:
@@ -201,35 +204,7 @@ func (brd Board) updatePiece(msg tea.Msg) (Board, tea.Cmd) {
 }
 
 func (brd Board) View() tea.View {
-	// Get visible file range
-	visStart, visEnd := brd.visibleFiles()
-
-	// Build headers from visible files only
-	var headers []string
-	for i := visStart; i < visEnd; i++ {
-		file := brd.files[i]
-		headers = append(headers, fmt.Sprintf("%-*s", file.Width()+gutter, file.Name()))
-	}
-	if len(headers) > 0 {
-		brd.table.Headers(headers...)
-	}
-
-	// Build rows from ranks, including only visible files
-	brd.table.ClearRows()
-	for _, rank := range brd.ranks {
-		var row []string
-		for i := visStart; i < visEnd; i++ {
-			square := rank.squares[i]
-			row = append(row, truncate(square.piece.Render(), brd.files[i].Width()))
-		}
-		brd.table.Row(row...)
-	}
-
-	// Apply styling - adjust file index to be relative to visible range
-	visualFile := brd.position.file - visStart
-	brd.table.StyleFunc(style.CellStyler(brd.position.rank, visualFile))
-
-	return tea.NewView(brd.table)
+	return brd.viewCanvas()
 }
 
 func (brd Board) moveUp() (Board, tea.Cmd) {
@@ -309,6 +284,96 @@ func (brd Board) movePageDown() (Board, tea.Cmd) {
 type position struct {
 	rank int
 	file int
+}
+
+const (
+	headerRow     = 0
+	separatorRow  = 1
+	dataRowOffset = 2
+)
+
+// viewCanvas renders the board using Canvas/Layer composition.
+// This is the new rendering approach - call piece.View() and position via Draw().
+func (brd Board) viewCanvas() tea.View {
+	if !brd.initialized {
+		return tea.NewView("loading...")
+	}
+
+	canvas := lipgloss.NewCanvas(brd.viewportWidth, brd.viewportHeight)
+
+	// Get visible file range
+	visStart, visEnd := brd.visibleFiles()
+
+	// Calculate x positions for each visible file
+	xPositions := make([]int, visEnd-visStart)
+	x := 0
+	for i := visStart; i < visEnd; i++ {
+		xPositions[i-visStart] = x
+		x += brd.files[i].Width() + gutter
+	}
+
+	// Draw headers
+	for i := visStart; i < visEnd; i++ {
+		file := brd.files[i]
+		headerText := fmt.Sprintf("%-*s", file.Width(), file.Name())
+		area := image.Rect(xPositions[i-visStart], headerRow, xPositions[i-visStart]+file.Width(), headerRow+1)
+		content := uv.NewStyledString(headerText)
+		content.Draw(canvas, area)
+	}
+
+	// Draw separator line
+	separator := strings.Repeat("─", brd.viewportWidth)
+	sepContent := uv.NewStyledString(style.TableBorderStyle.Render(separator))
+	sepContent.Draw(canvas, image.Rect(0, separatorRow, brd.viewportWidth, separatorRow+1))
+
+	// Pass 1: Draw all piece content
+	for r, rank := range brd.ranks {
+		y := dataRowOffset + r
+
+		for i := visStart; i < visEnd; i++ {
+			f := i - visStart
+			square := rank.squares[i]
+			fileWidth := brd.files[i].Width()
+
+			pieceView := square.piece.View()
+			area := image.Rect(xPositions[f], y, xPositions[f]+fileWidth, y+1)
+			pieceView.Content.Draw(canvas, area)
+		}
+	}
+
+	// Pass 2: Apply highlights by setting cell backgrounds
+	// Order matters: col first, then row, then cell (cell wins)
+	visualFile := brd.position.file - visStart
+	selectedY := dataRowOffset + brd.position.rank
+
+	// Highlight selected column (full height)
+	colX := xPositions[visualFile]
+	colWidth := brd.files[brd.position.file].Width() + gutter
+	for r := range brd.ranks {
+		y := dataRowOffset + r
+		applyBgToArea(canvas, colX, y, colWidth, style.HlColStyle)
+	}
+
+	// Highlight selected row (full viewport width)
+	applyBgToArea(canvas, 0, selectedY, brd.viewportWidth, style.HlRowStyle)
+
+	// Highlight selected cell
+	applyBgToArea(canvas, colX, selectedY, colWidth, style.HlCellStyle)
+
+	return tea.NewView(canvas)
+}
+
+// applyBgToArea sets the background color on all cells in the given area
+func applyBgToArea(canvas *lipgloss.Canvas, x, y, width int, sty lipgloss.Style) {
+	// Todo: dont style beyond last col
+	bg := sty.GetBackground()
+	for cx := x; cx < x+width; cx++ {
+		cell := canvas.CellAt(cx, y)
+		if cell != nil {
+			cell.Style.Bg = bg
+			canvas.SetCell(cx, y, cell)
+		}
+	}
 }
 
 func truncate(s string, width int) string {

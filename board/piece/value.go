@@ -7,6 +7,8 @@ import (
 	nt "parcours/entity"
 )
 
+var _ board.Piece = Value{}
+
 // Value displays a formatted value while preserving the raw value for filtering
 type Value struct {
 	raw       nt.Value
@@ -22,6 +24,10 @@ func NewValue(raw nt.Value, formatter func(nt.Value) string) Value {
 
 func (v Value) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 	return v, nil
+}
+
+func (v Value) View() tea.View {
+	return tea.NewView(v.formatter(v.raw))
 }
 
 func (v Value) Render() string {

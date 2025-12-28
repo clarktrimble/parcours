@@ -262,6 +262,7 @@ func (lp LinePanel) buildRanks() []board.Rank {
 				continue
 			}
 			formatter := makeFormatter(field.Type, col.Format)
+			// Todo: add truncate with ellipsis to formatter yah
 			pieces = append(pieces, piece.NewValue(val, formatter))
 		}
 		ranks = append(ranks, board.NewRank(pieces))

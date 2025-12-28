@@ -6,6 +6,8 @@ import (
 	"parcours/board"
 )
 
+var _ board.Piece = TextInput{}
+
 // TextInput is an editable text field
 type TextInput struct {
 	value     string
@@ -82,6 +84,10 @@ func (t TextInput) Value() string {
 
 func (t TextInput) Cursor() int {
 	return t.cursor
+}
+
+func (t TextInput) View() tea.View {
+	return tea.NewView(t.value)
 }
 
 func (t TextInput) Render() string {

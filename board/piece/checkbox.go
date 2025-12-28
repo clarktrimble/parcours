@@ -6,6 +6,8 @@ import (
 	"parcours/board"
 )
 
+var _ board.Piece = Checkbox{}
+
 // Checkbox is a toggleable checkbox cell
 type Checkbox struct {
 	checked bool
@@ -36,6 +38,13 @@ func (c Checkbox) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 
 func (c Checkbox) Checked() bool {
 	return c.checked
+}
+
+func (c Checkbox) View() tea.View {
+	if c.checked {
+		return tea.NewView("[x]")
+	}
+	return tea.NewView("[ ]")
 }
 
 func (c Checkbox) Render() string {

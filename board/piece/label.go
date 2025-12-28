@@ -6,6 +6,8 @@ import (
 	"parcours/board"
 )
 
+var _ board.Piece = Label{}
+
 // Label is a read-only text cell
 type Label struct {
 	text string
@@ -21,6 +23,10 @@ func (l Label) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
 
 func (l Label) Text() string {
 	return l.text
+}
+
+func (l Label) View() tea.View {
+	return tea.NewView(l.text)
 }
 
 func (l Label) Render() string {

@@ -6,6 +6,8 @@ import (
 	"parcours/board"
 )
 
+var _ board.Piece = Operator{}
+
 // Operator cycles through a list of options
 type Operator struct {
 	options  []string
@@ -69,6 +71,13 @@ func (o Operator) Selected() string {
 
 func (o Operator) SelectedIndex() int {
 	return o.selected
+}
+
+func (o Operator) View() tea.View {
+	if o.selected < 0 || o.selected >= len(o.options) {
+		return tea.NewView("?")
+	}
+	return tea.NewView(o.options[o.selected])
 }
 
 func (o Operator) Render() string {

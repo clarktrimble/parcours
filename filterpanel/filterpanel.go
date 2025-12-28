@@ -3,10 +3,8 @@ package filterpanel
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 
 	"parcours/board"
 	"parcours/board/piece"
@@ -98,7 +96,10 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		pnl.board = pnl.buildBoard()
-		return pnl, nil
+		// Apply current size to new board
+		sized, cmd := pnl.board.Update(board.SizeMsg{Width: pnl.width, Height: pnl.height})
+		pnl.board = sized.(board.Board)
+		return pnl, cmd
 
 	case SizeMsg:
 		pnl.width = msg.Width
@@ -146,6 +147,10 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					pnl.selectedFilterIdx--
 				}
 				pnl.board = pnl.buildBoard()
+				// Apply current size to new board
+				sized, cmd := pnl.board.Update(board.SizeMsg{Width: pnl.width, Height: pnl.height})
+				pnl.board = sized.(board.Board)
+				return pnl, cmd
 			}
 			return pnl, nil
 		default:
@@ -161,44 +166,8 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (pnl FilterPanel) View() tea.View {
-	// Create a bordered box
-	dialogStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Padding(1, 2).
-		Width(60)
-
-	// Get board content as string via fmt
-	boardContent := fmt.Sprintf("%s", pnl.board.View().Content)
-
-	dialogContent := fmt.Sprintf("Filters:\n%s", boardContent)
-
-	dialog := dialogStyle.Render(dialogContent)
-
-	// Center the dialog
-	if pnl.width > 0 && pnl.height > 0 {
-		dialogHeight := strings.Count(dialog, "\n") + 1
-		dialogWidth := 64
-
-		vPad := (pnl.height - dialogHeight) / 2
-		hPad := (pnl.width - dialogWidth) / 2
-
-		if vPad < 0 {
-			vPad = 0
-		}
-		if hPad < 0 {
-			hPad = 0
-		}
-
-		dialogLayer := lipgloss.NewLayer("filter", dialog).
-			X(hPad).
-			Y(vPad)
-
-		return tea.NewView(dialogLayer)
-	}
-
-	dialogLayer := lipgloss.NewLayer("filter", dialog)
-	return tea.NewView(dialogLayer)
+	return pnl.board.View()
+	// Todo: where to decorate/pad "dialog" and maybe center or sommat?
 }
 
 func (pnl FilterPanel) applyCmd() tea.Cmd {
