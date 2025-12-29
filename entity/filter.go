@@ -35,3 +35,5 @@ type Sort struct {
 	Field string // Field name to sort by
 	Desc  bool   // Sort descending if true, ascending if false
 }
+
+// Todo: Ne excludes blank falues, i.e.: elapsed != 34532346 excludes all lines w/o elapsed

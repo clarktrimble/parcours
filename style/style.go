@@ -2,7 +2,6 @@ package style
 
 import (
 	"charm.land/lipgloss/v2"
-	"charm.land/lipgloss/v2/table"
 )
 
 var (
@@ -42,6 +41,7 @@ func CellStyler(selectedRow, selectedCol int) func(row, col int) lipgloss.Style 
 	}
 }
 
+/*
 // StyleTable applies consistent table styling for borders and separators
 func StyleTable(tbl *table.Table) {
 	tbl.Border(lipgloss.Border{
@@ -57,3 +57,4 @@ func StyleTable(tbl *table.Table) {
 		BorderColumn(false). // Disable column separators
 		BorderStyle(TableBorderStyle)
 }
+*/
