@@ -26,6 +26,13 @@ const (
 	headerHeight = 2 // Header row + separator line
 )
 
+// placeholder is a tea.Model that displays while waiting for data
+type placeholder struct{}
+
+func (placeholder) Init() tea.Cmd                       { return nil }
+func (placeholder) Update(tea.Msg) (tea.Model, tea.Cmd) { return placeholder{}, nil }
+func (placeholder) View() tea.View                      { return tea.NewView("Loading...") }
+
 // LinePanel displays paginated log lines using Board
 type LinePanel struct {
 	board tea.Model
@@ -42,9 +49,9 @@ type LinePanel struct {
 	colMap  map[string]nt.Column // Cached map of field name to column config
 
 	// Current cell info (derived from board position)
-	files        []board.File // visible files (always columnFile, assert on use)
-	currentField string
-	currentValue string
+	files       []board.File // visible files (always columnFile, assert on use)
+	currentRank int
+	currentFile int
 
 	// Size
 	width  int
@@ -61,18 +68,9 @@ func New(ctx context.Context, columns []nt.Column, fields []nt.Field, count int,
 		total:   count,
 		ctx:     ctx,
 		logger:  lgr,
+		board:   placeholder{},
 	}
 	lp.buildColMap()
-
-	// Initialize with minimal 1x1 board
-	// Todo: find a better approach
-	brd, _ := board.New(
-		[]board.Rank{board.NewRank([]tea.Model{piece.NewLabel("")})},
-		[]board.File{columnFile{}},
-		0, 0,
-	)
-	lp.board = brd
-	lp.files = []board.File{columnFile{}}
 	return lp
 }
 
@@ -94,18 +92,16 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PageMsg:
 		lp.lines = msg.Lines
 		lp.total = msg.Count
-		// Try to replace board data (preserves cursor position)
+
+		_, ok := lp.board.(placeholder)
+		if ok {
+			lp.board, lp.files = lp.buildBoard()
+			return lp, nil
+		}
+
 		ranks := lp.buildRanks()
 		var cmd tea.Cmd
 		lp.board, cmd = lp.board.Update(board.ReplaceMsg{Ranks: ranks})
-		// If replace failed (dimensions changed), rebuild board
-		if cmd != nil {
-			// Todo: explicitly signal rather than error cmd hax
-			if _, isErr := cmd().(message.ErrorMsg); isErr {
-				lp.board, lp.files = lp.buildBoard()
-				cmd = nil
-			}
-		}
 		return lp, cmd
 
 	case ColumnsMsg:
@@ -120,18 +116,9 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return lp, message.GetPageCmd(0, lp.PageSize())
 
 	case board.SquareMsg:
-		field, value, err := lp.cellAt(msg.Rank, msg.File)
-		if err != nil {
-			return lp, message.ErrorCmd(err)
-		}
-		lp.currentField = field
-		lp.currentValue = value
-		// Calculate absolute row and send SelectedMsg
-		absoluteRow := lp.offset + msg.Rank
-		lineId := lp.lines[msg.Rank].Id
-		return lp, func() tea.Msg {
-			return message.SelectedMsg{Row: absoluteRow, Id: lineId}
-		}
+		lp.currentRank = msg.Rank
+		lp.currentFile = msg.File
+		return lp, lp.selectedCmd(msg.Rank)
 
 	case board.NavMsg:
 		// Board hit a boundary - scroll the dataset
@@ -234,15 +221,29 @@ func (lp *LinePanel) buildColMap() {
 	}
 }
 
+// selectedCmd returns a command to send the selected row info
+func (lp LinePanel) selectedCmd(rank int) tea.Cmd {
+	if rank < 0 || rank >= len(lp.lines) {
+		err := errors.Errorf("rank out of range: %d", rank)
+		return func() tea.Msg { return err }
+	}
+	absoluteRow := lp.offset + rank
+	lineId := lp.lines[rank].Id
+	return func() tea.Msg {
+		return message.SelectedMsg{Row: absoluteRow, Id: lineId}
+	}
+}
+
 // filterCmd returns a command to open the filter dialog with the selected cell
 func (lp LinePanel) filterCmd() tea.Cmd {
-	if lp.currentField == "" {
-		return nil
+	field, value, err := lp.cellAt(lp.currentRank, lp.currentFile)
+	if err != nil {
+		return func() tea.Msg { return err }
 	}
 	return func() tea.Msg {
 		return message.OpenFilterMsg{
-			Field: lp.currentField,
-			Value: lp.currentValue,
+			Field: field,
+			Value: value,
 		}
 	}
 }
@@ -323,7 +324,7 @@ func (lp LinePanel) buildBoard() (board.Board, []board.File) {
 }
 
 // cellAt returns the field name and value at the given board position
-func (lp LinePanel) cellAt(rank, file int) (field, value string, err error) {
+func (lp LinePanel) cellAt(rank, file int) (field string, value nt.Value, err error) {
 	if file < 0 || file >= len(lp.files) || rank < 0 || rank >= len(lp.lines) {
 		err = errors.Errorf("cell out of range: file=%d, rank=%d", file, rank)
 		return
@@ -334,6 +335,6 @@ func (lp LinePanel) cellAt(rank, file int) (field, value string, err error) {
 		return
 	}
 	field = f.name
-	value = lp.lines[rank].Values[f.fieldIndex].String()
+	value = lp.lines[rank].Values[f.fieldIndex]
 	return
 }

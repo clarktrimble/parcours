@@ -15,12 +15,12 @@ func (m Model) getPage(offset, size int) tea.Cmd {
 
 		_, count, err := m.Store.GetView()
 		if err != nil {
-			return message.ErrorMsg{Err: err}
+			return err
 		}
 
 		linesData, err := m.Store.GetPage(offset, size)
 		if err != nil {
-			return message.ErrorMsg{Err: err}
+			return err
 		}
 
 		return tea.Batch(
@@ -43,7 +43,7 @@ func (m Model) getLine(id string) tea.Cmd {
 	return func() tea.Msg {
 		line, err := m.Store.GetLine(id)
 		if err != nil {
-			return message.ErrorMsg{Err: err}
+			return err
 		}
 
 		return detail.LineMsg{Line: line}
@@ -55,18 +55,18 @@ func (m Model) reloadColumns() tea.Cmd {
 
 	layout, err := loadLayout(layoutFile)
 	if err != nil {
-		return message.ErrorCmd(err)
+		return func() tea.Msg { return err }
 	}
 
 	err = layout.promote(m.Store)
 	if err != nil {
-		return message.ErrorCmd(err)
+		return func() tea.Msg { return err }
 	}
 
 	// Get updated fields after promotion
 	fields, _, err := m.Store.GetView()
 	if err != nil {
-		return message.ErrorCmd(err)
+		return func() tea.Msg { return err }
 	}
 
 	// Send column updates to both panels
@@ -85,13 +85,13 @@ func (m Model) reloadFilter() tea.Cmd {
 
 	layout, err := loadLayout(layoutFile)
 	if err != nil {
-		return message.ErrorCmd(err)
+		return func() tea.Msg { return err }
 	}
 
 	// Todo: what about "sorts"?
 	err = m.Store.SetView(layout.Filter, nil)
 	if err != nil {
-		return message.ErrorCmd(err)
+		return func() tea.Msg { return err }
 	}
 
 	return func() tea.Msg { return linepanel.ResetMsg{} }

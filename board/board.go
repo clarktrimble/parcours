@@ -10,7 +10,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/pkg/errors"
 
-	"parcours/message"
 	"parcours/style"
 )
 
@@ -129,7 +128,7 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newBrd, err := brd.replace(msg.Ranks)
 		if err != nil {
 			return brd, func() tea.Msg {
-				return message.ErrorMsg{Err: err}
+				return err
 			}
 		}
 		return newBrd, newBrd.positionCmd()

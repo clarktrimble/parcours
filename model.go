@@ -167,9 +167,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selectedId = msg.Id
 		return m, nil
 
-	case message.ErrorMsg:
-		m.logger.Error(m.ctx, "error msg", msg.Err)
-		m.errorString = msg.Err.Error()
+	case error:
+		m.logger.Error(m.ctx, "error", msg)
+		m.errorString = msg.Error()
 		//m = m.ready()
 		//return m.refocus(alert)
 		return m, nil
