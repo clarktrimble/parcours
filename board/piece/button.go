@@ -2,11 +2,7 @@ package piece
 
 import (
 	tea "charm.land/bubbletea/v2"
-
-	"parcours/board"
 )
-
-var _ board.Piece = Button{}
 
 // PressedMsg is sent when a button is pressed
 type PressedMsg struct{}
@@ -24,7 +20,9 @@ func NewButton(label, key string) Button {
 	}
 }
 
-func (b Button) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
+func (b Button) Init() tea.Cmd { return nil }
+
+func (b Button) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		if msg.String() == b.key {

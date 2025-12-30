@@ -199,7 +199,7 @@ func (pnl FilterPanel) buildBoard() board.Board {
 	if len(pnl.filters) == 0 {
 		// Empty board with placeholder
 		brd, _ := board.New(
-			[]board.Rank{board.NewRank([]board.Piece{piece.NewLabel("(no filters)")})},
+			[]board.Rank{board.NewRank([]tea.Model{piece.NewLabel("(no filters)")})},
 			[]board.File{filterFile{name: "", width: 20}},
 			0, 0,
 		)
@@ -216,7 +216,7 @@ func (pnl FilterPanel) buildBoard() board.Board {
 			}
 		}
 
-		rank := board.NewRank([]board.Piece{
+		rank := board.NewRank([]tea.Model{
 			piece.NewCheckbox(f.Enabled),
 			piece.NewLabel(f.Field),
 			piece.NewOperator(opStrings, opIndex),

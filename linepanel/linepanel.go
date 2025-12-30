@@ -4,6 +4,7 @@ import (
 	"context"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/pkg/errors"
 
 	"parcours/board"
 	"parcours/board/piece"
@@ -13,8 +14,9 @@ import (
 
 // columnFile implements board.File
 type columnFile struct {
-	name  string
-	width int
+	name       string
+	width      int
+	fieldIndex int // index into lp.fields / line.Values
 }
 
 func (f columnFile) Name() string { return f.name }
@@ -39,7 +41,8 @@ type LinePanel struct {
 	fields  []nt.Field           // Field metadata from store
 	colMap  map[string]nt.Column // Cached map of field name to column config
 
-	// Current piece (from Board)
+	// Current cell info (derived from board position)
+	files        []board.File // visible files (always columnFile, assert on use)
 	currentField string
 	currentValue string
 
@@ -64,11 +67,12 @@ func New(ctx context.Context, columns []nt.Column, fields []nt.Field, count int,
 	// Initialize with minimal 1x1 board
 	// Todo: find a better approach
 	brd, _ := board.New(
-		[]board.Rank{board.NewRank([]board.Piece{piece.NewLabel("")})},
+		[]board.Rank{board.NewRank([]tea.Model{piece.NewLabel("")})},
 		[]board.File{columnFile{}},
 		0, 0,
 	)
 	lp.board = brd
+	lp.files = []board.File{columnFile{}}
 	return lp
 }
 
@@ -98,7 +102,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd != nil {
 			// Todo: explicitly signal rather than error cmd hax
 			if _, isErr := cmd().(message.ErrorMsg); isErr {
-				lp.board = lp.buildBoard()
+				lp.board, lp.files = lp.buildBoard()
 				cmd = nil
 			}
 		}
@@ -116,18 +120,18 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return lp, message.GetPageCmd(0, lp.PageSize())
 
 	case board.SquareMsg:
-		// Track current piece info
-		lp.currentField = msg.Field
-		lp.currentValue = msg.Value
-		// Calculate absolute row and send SelectedMsg
-		if msg.Rank >= 0 && msg.Rank < len(lp.lines) {
-			absoluteRow := lp.offset + msg.Rank
-			lineId := lp.lines[msg.Rank].Id
-			return lp, func() tea.Msg {
-				return message.SelectedMsg{Row: absoluteRow, Id: lineId}
-			}
+		field, value, err := lp.cellAt(msg.Rank, msg.File)
+		if err != nil {
+			return lp, message.ErrorCmd(err)
 		}
-		return lp, nil
+		lp.currentField = field
+		lp.currentValue = value
+		// Calculate absolute row and send SelectedMsg
+		absoluteRow := lp.offset + msg.Rank
+		lineId := lp.lines[msg.Rank].Id
+		return lp, func() tea.Msg {
+			return message.SelectedMsg{Row: absoluteRow, Id: lineId}
+		}
 
 	case board.NavMsg:
 		// Board hit a boundary - scroll the dataset
@@ -251,7 +255,7 @@ func (lp LinePanel) View() tea.View {
 func (lp LinePanel) buildRanks() []board.Rank {
 	var ranks []board.Rank
 	for _, line := range lp.lines {
-		var pieces []board.Piece
+		var pieces []tea.Model
 		for i, val := range line.Values {
 			if i >= len(lp.fields) {
 				continue
@@ -289,14 +293,14 @@ func makeFormatter(fieldType, format string) func(nt.Value) string {
 
 // buildBoard converts current lines and columns into a Board
 // Todo: rethink Board genisis, like totally
-func (lp LinePanel) buildBoard() board.Board {
+func (lp LinePanel) buildBoard() (board.Board, []board.File) {
 	var files []board.File
-	for _, field := range lp.fields {
+	for i, field := range lp.fields {
 		col, exists := lp.colMap[field.Name]
 		if !exists || col.Hidden || col.Demote {
 			continue
 		}
-		files = append(files, columnFile{name: field.Name, width: col.Width})
+		files = append(files, columnFile{name: field.Name, width: col.Width, fieldIndex: i})
 	}
 
 	ranks := lp.buildRanks()
@@ -315,5 +319,21 @@ func (lp LinePanel) buildBoard() board.Board {
 		brd = sized.(board.Board) // Todo: unfuck
 	}
 
-	return brd
+	return brd, files
+}
+
+// cellAt returns the field name and value at the given board position
+func (lp LinePanel) cellAt(rank, file int) (field, value string, err error) {
+	if file < 0 || file >= len(lp.files) || rank < 0 || rank >= len(lp.lines) {
+		err = errors.Errorf("cell out of range: file=%d, rank=%d", file, rank)
+		return
+	}
+	f := lp.files[file].(columnFile)
+	if f.fieldIndex < 0 || f.fieldIndex >= len(lp.lines[rank].Values) {
+		err = errors.Errorf("fieldIndex out of range: %d", f.fieldIndex)
+		return
+	}
+	field = f.name
+	value = lp.lines[rank].Values[f.fieldIndex].String()
+	return
 }

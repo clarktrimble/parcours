@@ -3,11 +3,8 @@ package piece
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"parcours/board"
 	nt "parcours/entity"
 )
-
-var _ board.Piece = Value{}
 
 // Value displays a formatted value while preserving the raw value for filtering
 type Value struct {
@@ -22,7 +19,9 @@ func NewValue(raw nt.Value, formatter func(nt.Value) string) Value {
 	return Value{raw: raw, formatter: formatter}
 }
 
-func (v Value) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
+func (v Value) Init() tea.Cmd { return nil }
+
+func (v Value) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return v, nil
 }
 

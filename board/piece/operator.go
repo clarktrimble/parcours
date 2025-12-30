@@ -6,8 +6,6 @@ import (
 	"parcours/board"
 )
 
-var _ board.Piece = Operator{}
-
 // Operator cycles through a list of options
 type Operator struct {
 	options  []string
@@ -26,7 +24,9 @@ func NewOperator(options []string, selected int) Operator {
 	}
 }
 
-func (o Operator) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
+func (o Operator) Init() tea.Cmd { return nil }
+
+func (o Operator) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case board.PositionMsg:
 		o.rank = msg.Rank

@@ -2,11 +2,7 @@ package piece
 
 import (
 	tea "charm.land/bubbletea/v2"
-
-	"parcours/board"
 )
-
-var _ board.Piece = Label{}
 
 // Label is a read-only text cell
 type Label struct {
@@ -17,7 +13,9 @@ func NewLabel(text string) Label {
 	return Label{text: text}
 }
 
-func (l Label) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
+func (l Label) Init() tea.Cmd { return nil }
+
+func (l Label) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return l, nil
 }
 

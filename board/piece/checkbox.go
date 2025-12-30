@@ -6,8 +6,6 @@ import (
 	"parcours/board"
 )
 
-var _ board.Piece = Checkbox{}
-
 // Checkbox is a toggleable checkbox cell
 type Checkbox struct {
 	checked bool
@@ -19,7 +17,9 @@ func NewCheckbox(checked bool) Checkbox {
 	return Checkbox{checked: checked}
 }
 
-func (c Checkbox) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
+func (c Checkbox) Init() tea.Cmd { return nil }
+
+func (c Checkbox) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case board.PositionMsg:
 		c.rank = msg.Rank

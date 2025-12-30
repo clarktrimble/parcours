@@ -6,8 +6,6 @@ import (
 	"parcours/board"
 )
 
-var _ board.Piece = TextInput{}
-
 // TextInput is an editable text field
 type TextInput struct {
 	value     string
@@ -28,7 +26,9 @@ func NewTextInput(value string, maxLength int) TextInput {
 	}
 }
 
-func (t TextInput) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
+func (t TextInput) Init() tea.Cmd { return nil }
+
+func (t TextInput) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case board.PositionMsg:
 		t.rank = msg.Rank

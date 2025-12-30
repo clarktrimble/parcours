@@ -2,16 +2,14 @@ package piece
 
 import (
 	tea "charm.land/bubbletea/v2"
-
-	"parcours/board"
 )
-
-var _ board.Piece = Empty{}
 
 // Empty is a placeholder piece that renders as empty space
 type Empty struct{}
 
-func (empty Empty) Update(msg tea.Msg) (board.Piece, tea.Cmd) {
+func (empty Empty) Init() tea.Cmd { return nil }
+
+func (empty Empty) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return empty, nil
 }
 

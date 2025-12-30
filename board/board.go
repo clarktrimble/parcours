@@ -19,17 +19,10 @@ const (
 	separator = "-"
 )
 
+// File represents a vertical file on the board, carrying type and formatting.
 type File interface {
 	Name() string
 	Width() int
-}
-
-// Piece represents a board piece that can update and render itself.
-type Piece interface {
-	Update(tea.Msg) (Piece, tea.Cmd)
-	View() tea.View
-	Value() string // Returns the raw value (for filtering, etc.) Todo: nt.Value ??
-	// Todo: want pieces to be tea.Model, but what about Value()??
 }
 
 // PieceMsg is the interface for messages from interactive pieces.
@@ -37,17 +30,19 @@ type PieceMsg interface {
 	IsPieceMsg()
 }
 
+// Square represents a square of the board.
 type Square struct {
-	piece Piece
+	piece tea.Model
 }
 
+// Rank represents a horizontal rank across the board.
 type Rank struct {
 	squares []Square
 	// Todo: Rank _is_ []Square ??
 }
 
 // NewRank creates a Rank from a slice of pieces.
-func NewRank(pieces []Piece) Rank {
+func NewRank(pieces []tea.Model) Rank {
 	squares := make([]Square, len(pieces))
 	for i, piece := range pieces {
 		squares[i] = Square{
@@ -398,16 +393,11 @@ func truncate(s string, width int) string {
 	return string(runes[:width-1]) + style.MutedStyle.Render("…")
 }
 
-// positionCmd returns a command that sends the current position and cell info
-// Todo: consider "delete" etc alternative where board handles certain sensible keys
-// and emits a cmd/msg with relevant data, this might be workable??
-// the benefit would be not caching this elsewhere
+// positionCmd returns a command that sends the current cursor position
 func (brd Board) positionCmd() tea.Cmd {
 	pos := SquareMsg{
-		Rank:  brd.position.rank,
-		File:  brd.position.file,
-		Field: brd.files[brd.position.file].Name(),
-		Value: brd.ranks[brd.position.rank].squares[brd.position.file].piece.Value(),
+		Rank: brd.position.rank,
+		File: brd.position.file,
 	}
 	return func() tea.Msg { return pos }
 }

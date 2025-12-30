@@ -1,11 +1,9 @@
 package board
 
-// SquareMsg contains the board cursor position and selected cell info
+// SquareMsg contains the board cursor position
 type SquareMsg struct {
-	Rank  int    // Row position within board (0-indexed)
-	File  int    // Column position within board (0-indexed)
-	Field string // Field name from the column header
-	Value string // Cell value from the piece
+	Rank int // Row position within board (0-indexed)
+	File int // Column position within board (0-indexed)
 }
 
 // PositionMsg tells a piece its position on the board
