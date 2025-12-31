@@ -12,15 +12,6 @@ import (
 	"parcours/message"
 )
 
-// columnFile implements board.File
-type columnFile struct {
-	name       string
-	width      int
-	fieldIndex int // index into lp.fields / line.Values
-}
-
-func (f columnFile) Name() string { return f.name }
-func (f columnFile) Width() int   { return f.width }
 
 const (
 	headerHeight = 2 // Header row + separator line
@@ -49,9 +40,10 @@ type LinePanel struct {
 	colMap  map[string]nt.Column // Cached map of field name to column config
 
 	// Current cell info (derived from board position)
-	files       []board.File // visible files (always columnFile, assert on use)
-	currentRank int
-	currentFile int
+	files        []board.File // visible files
+	fieldIndices []int        // maps file index to field index in line.Values
+	currentRank  int
+	currentFile  int
 
 	// Size
 	width  int
@@ -294,14 +286,16 @@ func makeFormatter(fieldType, format string) func(nt.Value) string {
 
 // buildBoard converts current lines and columns into a Board
 // Todo: rethink Board genisis, like totally
-func (lp LinePanel) buildBoard() (board.Board, []board.File) {
+func (lp *LinePanel) buildBoard() (board.Board, []board.File) {
 	var files []board.File
+	lp.fieldIndices = lp.fieldIndices[:0]
 	for i, field := range lp.fields {
 		col, exists := lp.colMap[field.Name]
 		if !exists || col.Hidden || col.Demote {
 			continue
 		}
-		files = append(files, columnFile{name: field.Name, width: col.Width, fieldIndex: i})
+		files = append(files, board.File{Name: field.Name, Width: col.Width})
+		lp.fieldIndices = append(lp.fieldIndices, i)
 	}
 
 	ranks := lp.buildRanks()
@@ -329,12 +323,12 @@ func (lp LinePanel) cellAt(rank, file int) (field string, value nt.Value, err er
 		err = errors.Errorf("cell out of range: file=%d, rank=%d", file, rank)
 		return
 	}
-	f := lp.files[file].(columnFile)
-	if f.fieldIndex < 0 || f.fieldIndex >= len(lp.lines[rank].Values) {
-		err = errors.Errorf("fieldIndex out of range: %d", f.fieldIndex)
+	fieldIndex := lp.fieldIndices[file]
+	if fieldIndex < 0 || fieldIndex >= len(lp.lines[rank].Values) {
+		err = errors.Errorf("fieldIndex out of range: %d", fieldIndex)
 		return
 	}
-	field = f.name
-	value = lp.lines[rank].Values[f.fieldIndex]
+	field = lp.files[file].Name
+	value = lp.lines[rank].Values[fieldIndex]
 	return
 }

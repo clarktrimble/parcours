@@ -14,10 +14,12 @@ type PositionMsg struct {
 
 // Navigation directions
 const (
-	NavDown     = "down"
 	NavUp       = "up"
-	NavPageDown = "pagedown"
+	NavDown     = "down"
+	NavLeft     = "left"
+	NavRight    = "right"
 	NavPageUp   = "pageup"
+	NavPageDown = "pagedown"
 	NavTop      = "top"
 	NavBottom   = "bottom"
 )

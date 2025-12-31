@@ -14,14 +14,16 @@ import (
 )
 
 const (
-	gutter    = 1 // space between columns
-	separator = "-"
+	gutter       = 1 // space between columns
+	separator    = "-"
+	headerHeight = 2 // header row + separator line
 )
 
-// File represents a vertical file on the board, carrying type and formatting.
-type File interface {
-	Name() string
-	Width() int
+// File represents a file down the board.
+// Has ambitions to carry type and/or formatter for its pieces.
+type File struct {
+	Name  string
+	Width int
 }
 
 // PieceMsg is the interface for messages from interactive pieces.
@@ -34,10 +36,9 @@ type Square struct {
 	piece tea.Model
 }
 
-// Rank represents a horizontal rank across the board.
+// Rank represents a rank across the board.
 type Rank struct {
 	squares []Square
-	// Todo: Rank _is_ []Square ??
 }
 
 // NewRank creates a Rank from a slice of pieces.
@@ -51,12 +52,7 @@ func NewRank(pieces []tea.Model) Rank {
 	return Rank{squares: squares}
 }
 
-// Board represents a 2D grid of squares organized into ranks (rows).
-// Board is designed for immutable use in bubbletea/Elm architecture:
-// - Navigation methods (MoveUp/Down/Left/Right) return new Board with updated position
-// - The underlying ranks slice is shared between Board instances (copy-on-write)
-// - This is safe as long as square values are never mutated after board creation
-// - If you need to modify square values, clone the ranks slice first
+// Board represents a grid of squares with ranks and files.
 type Board struct {
 	ranks    []Rank
 	files    []File
@@ -98,20 +94,6 @@ func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
 	return
 }
 
-// replace replaces a board's ranks.
-func (brd Board) replace(ranks []Rank) (board Board, err error) {
-
-	brd.ranks = ranks
-	err = brd.validate()
-	if err != nil {
-		return
-	}
-
-	brd.setPositions()
-	board = brd
-	return
-}
-
 func (brd Board) Init() tea.Cmd {
 	return nil
 }
@@ -119,19 +101,20 @@ func (brd Board) Init() tea.Cmd {
 func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
+
 	case SizeMsg:
 		brd.vpw = msg.Width
 		brd.vph = msg.Height
 		brd.initialized = true
 		return brd.checkFileOffset(), nil
+
 	case ReplaceMsg:
 		newBrd, err := brd.replace(msg.Ranks)
 		if err != nil {
-			return brd, func() tea.Msg {
-				return err
-			}
+			return brd, func() tea.Msg { return err }
 		}
 		return newBrd, newBrd.positionCmd()
+
 	case MoveToMsg:
 		switch msg.MoveTo {
 		case Top:
@@ -140,6 +123,7 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			brd.position.rank = brd.height - 1
 		}
 		return brd, brd.positionCmd()
+
 	case tea.KeyPressMsg:
 		if brd.editMode {
 			// Edit mode: Enter exits, everything else goes to piece
@@ -152,30 +136,37 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Nav mode
 		switch msg.String() {
+
 		case "i":
 			// Todo: editMode only makes sense for textinput
 			brd.editMode = true
 			return brd, nil
+
 		case "up", "k":
-			return brd.moveUp()
+			return brd.move(NavUp)
 		case "down", "j":
-			return brd.moveDown()
+			return brd.move(NavDown)
 		case "left", "h":
-			return brd.moveLeft()
+			return brd.move(NavLeft)
 		case "right", "l":
-			return brd.moveRight()
+			return brd.move(NavRight)
+
 		case "g":
-			return brd.moveTop()
+			brd.position.rank = 0
+			return brd, tea.Batch(brd.positionCmd(), navCmd(NavTop))
+
 		case "G":
-			return brd.moveBottom()
+			brd.position.rank = brd.height - 1
+			return brd, tea.Batch(brd.positionCmd(), navCmd(NavBottom))
+
 		case "pgup", "ctrl+u":
-			return brd.movePageUp()
+			return brd, navCmd(NavPageUp)
+
 		case "pgdown", "ctrl+d":
-			return brd.movePageDown()
+			return brd, navCmd(NavPageDown)
 		}
 	}
 
-	// Non-key messages still go to focused piece
 	return brd.updatePiece(msg)
 }
 
@@ -184,8 +175,6 @@ func (brd Board) updatePiece(msg tea.Msg) (Board, tea.Cmd) {
 
 	r := brd.position.rank
 	f := brd.position.file
-
-	// Note: mutating shared ranks slice!!
 
 	square := brd.ranks[r].squares[f]
 	piece, cmd := square.piece.Update(msg)
@@ -199,7 +188,7 @@ func (brd Board) View() tea.View {
 		return tea.NewView("loading...")
 	}
 
-	canvas := lipgloss.NewCanvas(brd.vpw, 2+len(brd.ranks)) // Todo: demagic
+	canvas := lipgloss.NewCanvas(brd.vpw, headerHeight+len(brd.ranks))
 
 	files := brd.files[brd.fileOffset:brd.layoutEnd]
 	drawHeaders(canvas, files, brd.layoutAreas)
@@ -215,78 +204,6 @@ func (brd Board) View() tea.View {
 	brd.drawHighlight(canvas, areas)
 
 	return tea.NewView(canvas)
-}
-
-func (brd Board) moveUp() (Board, tea.Cmd) {
-	if brd.position.rank > 0 {
-		brd.position.rank--
-		return brd, brd.positionCmd()
-	}
-	// Hit top edge
-	return brd, func() tea.Msg {
-		return NavMsg{Direction: NavUp}
-	}
-}
-
-func (brd Board) moveDown() (Board, tea.Cmd) {
-	if brd.position.rank < brd.height-1 {
-		brd.position.rank++
-		return brd, brd.positionCmd()
-	}
-	// Hit bottom edge
-	return brd, func() tea.Msg {
-		return NavMsg{Direction: NavDown}
-	}
-}
-
-func (brd Board) moveLeft() (Board, tea.Cmd) {
-	if brd.position.file > 0 {
-		brd.position.file--
-		brd = brd.checkFileOffset()
-		return brd, brd.positionCmd()
-	}
-	return brd, nil
-}
-
-func (brd Board) moveRight() (Board, tea.Cmd) {
-	if brd.position.file < brd.width-1 {
-		brd.position.file++
-		brd = brd.checkFileOffset()
-		return brd, brd.positionCmd()
-	}
-	return brd, nil
-}
-
-func (brd Board) moveTop() (Board, tea.Cmd) {
-	// Always move to top of board and signal want absolute top of dataset
-	brd.position.rank = 0
-	return brd, tea.Batch(
-		brd.positionCmd(),
-		func() tea.Msg { return NavMsg{Direction: NavTop} },
-	)
-}
-
-func (brd Board) moveBottom() (Board, tea.Cmd) {
-	// Always move to bottom of board and signal want absolute bottom of dataset
-	brd.position.rank = brd.height - 1
-	return brd, tea.Batch(
-		brd.positionCmd(),
-		func() tea.Msg { return NavMsg{Direction: NavBottom} },
-	)
-}
-
-func (brd Board) movePageUp() (Board, tea.Cmd) {
-	// Page up: request previous page, preserve cursor position
-	return brd, func() tea.Msg {
-		return NavMsg{Direction: NavPageUp}
-	}
-}
-
-func (brd Board) movePageDown() (Board, tea.Cmd) {
-	// Page down: request next page, preserve cursor position
-	return brd, func() tea.Msg {
-		return NavMsg{Direction: NavPageDown}
-	}
 }
 
 // unexported
@@ -306,6 +223,20 @@ func (brd *Board) setPositions() {
 	}
 }
 
+// replace replaces a board's ranks.
+func (brd Board) replace(ranks []Rank) (board Board, err error) {
+
+	brd.ranks = ranks
+	err = brd.validate()
+	if err != nil {
+		return
+	}
+
+	brd.setPositions()
+	board = brd
+	return
+}
+
 // applyBgToArea sets the background color on all cells in the given area
 func applyBgToArea(canvas *lipgloss.Canvas, x, y, width int, sty lipgloss.Style) {
 	// Todo: dont style beyond last col
@@ -319,7 +250,6 @@ func applyBgToArea(canvas *lipgloss.Canvas, x, y, width int, sty lipgloss.Style)
 	}
 }
 
-// Note: mutates shared slice, safe with Elm pattern (caller replaces copy)
 func (brd Board) updateLayout() Board {
 	brd.layoutAreas = brd.layoutAreas[:0]
 	x := 0
@@ -327,7 +257,7 @@ func (brd Board) updateLayout() Board {
 		if x >= brd.vpw {
 			break
 		}
-		w := brd.files[i].Width()
+		w := brd.files[i].Width
 		brd.layoutAreas = append(brd.layoutAreas, image.Rect(x, 0, x+w, 1))
 		x += w + gutter
 		brd.layoutEnd = i + 1
@@ -354,8 +284,7 @@ func fullSpan(areas []image.Rectangle, y int) image.Rectangle {
 
 func drawHeaders(canvas *lipgloss.Canvas, files []File, areas []image.Rectangle) {
 	for i, file := range files {
-		// Todo: consider adding View() to File
-		uv.NewStyledString(file.Name()).Draw(canvas, areas[i])
+		uv.NewStyledString(file.Name).Draw(canvas, areas[i])
 	}
 
 	area := fullSpan(areas, areas[0].Max.Y)
@@ -401,6 +330,43 @@ func (brd Board) positionCmd() tea.Cmd {
 	return func() tea.Msg { return pos }
 }
 
+func navCmd(dir string) tea.Cmd {
+	return func() tea.Msg { return NavMsg{Direction: dir} }
+}
+
+func (brd Board) move(dir string) (Board, tea.Cmd) {
+
+	switch dir {
+	case NavUp:
+		if brd.position.rank == 0 {
+			return brd, navCmd(NavUp)
+		}
+		brd.position.rank--
+
+	case NavDown:
+		if brd.position.rank == brd.height-1 {
+			return brd, navCmd(NavDown)
+		}
+		brd.position.rank++
+
+	case NavLeft:
+		if brd.position.file == 0 {
+			return brd, nil
+		}
+		brd.position.file--
+		brd = brd.checkFileOffset()
+
+	case NavRight:
+		if brd.position.file == brd.width-1 {
+			return brd, nil
+		}
+		brd.position.file++
+		brd = brd.checkFileOffset()
+	}
+
+	return brd, brd.positionCmd()
+}
+
 func (brd Board) checkFileOffset() Board {
 	if brd.position.file < brd.fileOffset {
 		brd.fileOffset = brd.position.file
@@ -423,10 +389,10 @@ func (brd Board) fileVisibleFrom(offset, file int) bool {
 	// Todo: can be more efficient? (find last visible?)
 	x := 0
 	for i := offset; i <= file; i++ {
-		if x+brd.files[i].Width() > brd.vpw {
+		if x+brd.files[i].Width > brd.vpw {
 			return false
 		}
-		x += brd.files[i].Width() + gutter
+		x += brd.files[i].Width + gutter
 	}
 	return true
 }

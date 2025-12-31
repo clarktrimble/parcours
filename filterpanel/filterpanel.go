@@ -108,9 +108,12 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		pnl.board = sized.(board.Board)
 		return pnl, nil
 
+	// Todo: these are an oddity??
+	//       more to do with widgets than pieces
 	case piece.CheckedMsg:
 		if msg.Rank >= 0 && msg.Rank < len(pnl.filters) {
 			pnl.filters[msg.Rank].Enabled = msg.Checked
+			// Todo: dont ignore range issues, pretty please
 		}
 		return pnl, nil
 
@@ -200,7 +203,7 @@ func (pnl FilterPanel) buildBoard() board.Board {
 		// Empty board with placeholder
 		brd, _ := board.New(
 			[]board.Rank{board.NewRank([]tea.Model{piece.NewLabel("(no filters)")})},
-			[]board.File{filterFile{name: "", width: 20}},
+			[]board.File{{Name: "", Width: 20}},
 			0, 0,
 		)
 		return brd
@@ -226,21 +229,13 @@ func (pnl FilterPanel) buildBoard() board.Board {
 	}
 
 	files := []board.File{
-		filterFile{name: "", width: 3},       // checkbox
-		filterFile{name: "Field", width: 15}, // field name
-		filterFile{name: "Op", width: 10},    // operator
-		filterFile{name: "Value", width: 30}, // value
+		{Name: "", Width: 3},       // checkbox
+		{Name: "Field", Width: 15}, // field name
+		{Name: "Op", Width: 10},    // operator
+		{Name: "Value", Width: 30}, // value
 	}
 
 	brd, _ := board.New(ranks, files, pnl.selectedFilterIdx, 0) // Todo: handle error
 	return brd
 }
 
-// filterFile implements board.File
-type filterFile struct {
-	name  string
-	width int
-}
-
-func (f filterFile) Name() string { return f.name }
-func (f filterFile) Width() int   { return f.width }
