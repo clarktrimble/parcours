@@ -19,6 +19,22 @@ const (
 	headerHeight = 2 // header row + separator line
 )
 
+// Placeholder is a tea.Model that displays while waiting for data
+type Placeholder struct {
+	message string
+}
+
+func NewPlaceholder(message string) Placeholder {
+	return Placeholder{message: message}
+}
+
+func (p Placeholder) Init() tea.Cmd                       { return nil }
+func (p Placeholder) Update(tea.Msg) (tea.Model, tea.Cmd) { return p, nil }
+
+func (p Placeholder) View() tea.View {
+	return tea.NewView(p.message)
+}
+
 // File represents a file down the board.
 // Has ambitions to carry type and/or formatter for its pieces.
 type File struct {
@@ -94,6 +110,19 @@ func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
 	return
 }
 
+// NewToo creates a Board with viewport size. Todo: consolidate with New
+func NewToo(ranks []Rank, files []File, rank, file, vpw, vph int) (Board, error) {
+	brd, err := New(ranks, files, rank, file)
+	if err != nil {
+		return brd, err
+	}
+	brd.vpw = vpw
+	brd.vph = vph
+	brd.initialized = true
+	brd = brd.updateLayout()
+	return brd, nil
+}
+
 func (brd Board) Init() tea.Cmd {
 	return nil
 }
@@ -114,6 +143,14 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return brd, func() tea.Msg { return err }
 		}
 		return newBrd, newBrd.positionCmd()
+
+		/*
+			case AppendMsg:
+				return brd.appendRank(msg.Rank)
+
+			case RemoveMsg:
+				return brd.removeRank(msg.Index)
+		*/
 
 	case MoveToMsg:
 		switch msg.MoveTo {
@@ -236,6 +273,43 @@ func (brd Board) replace(ranks []Rank) (board Board, err error) {
 	board = brd
 	return
 }
+
+/*
+func (brd Board) appendRank(rank Rank) (Board, tea.Cmd) {
+	brd.ranks = append(brd.ranks, rank)
+	brd.height++
+	brd.setPositionForRank(brd.height - 1)
+	return brd, nil
+}
+
+func (brd Board) removeRank(index int) (Board, tea.Cmd) {
+	if index < 0 || index >= brd.height {
+		return brd, nil
+	}
+	brd.ranks = append(brd.ranks[:index], brd.ranks[index+1:]...)
+	brd.height--
+	// Adjust cursor if needed
+	if brd.position.rank >= brd.height && brd.height > 0 {
+		brd.position.rank = brd.height - 1
+	}
+	if brd.height == 0 {
+		brd.position.rank = 0
+	}
+	// Reindex positions for ranks after deleted one
+	for r := index; r < brd.height; r++ {
+		brd.setPositionForRank(r)
+	}
+	return brd, brd.positionCmd()
+}
+
+func (brd *Board) setPositionForRank(r int) {
+	for f := range brd.ranks[r].squares {
+		piece := brd.ranks[r].squares[f].piece
+		updated, _ := piece.Update(PositionMsg{Rank: r, File: f})
+		brd.ranks[r].squares[f].piece = updated
+	}
+}
+*/
 
 // applyBgToArea sets the background color on all cells in the given area
 func applyBgToArea(canvas *lipgloss.Canvas, x, y, width int, sty lipgloss.Style) {

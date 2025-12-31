@@ -14,7 +14,7 @@ import (
 
 // FilterPanel displays a modal dialog for editing filters using Board
 type FilterPanel struct {
-	board   board.Board
+	board   tea.Model
 	filters []nt.Filter
 
 	width             int
@@ -28,6 +28,7 @@ type FilterPanel struct {
 	logger nt.Logger
 }
 
+// Todo: put op stuffs in Filter plz
 // opStrings for Operator piece
 var opStrings = []string{
 	"==",
@@ -52,13 +53,31 @@ var opFromString = map[string]nt.FilterOp{
 	"<=":       nt.Lte,
 }
 
+// opIndex maps FilterOp to index in opStrings
+var opIndex = map[nt.FilterOp]int{
+	nt.Eq:       0,
+	nt.Ne:       1,
+	nt.Contains: 2,
+	nt.Match:    3,
+	nt.Gt:       4,
+	nt.Gte:      5,
+	nt.Lt:       6,
+	nt.Lte:      7,
+}
+
+var filterFiles = []board.File{
+	{Name: "", Width: 3},
+	{Name: "Field", Width: 15},
+	{Name: "Op", Width: 10},
+	{Name: "Value", Width: 30},
+}
+
 func New(ctx context.Context, lgr nt.Logger) FilterPanel {
-	pnl := FilterPanel{
+	return FilterPanel{
 		ctx:    ctx,
 		logger: lgr,
+		board:  board.Placeholder{},
 	}
-	pnl.board = pnl.buildBoard()
-	return pnl
 }
 
 func (pnl FilterPanel) Init() tea.Cmd {
@@ -73,39 +92,22 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		pnl.filters = make([]nt.Filter, len(pnl.filtersSnapshot))
 		copy(pnl.filters, pnl.filtersSnapshot)
 
-		// Check for duplicate filter (same field, value, op)
 		newFilter := nt.Filter{
-			Op:      nt.Ne, // Default to != ("I don't want these")
+			Op:      nt.Ne,
 			Field:   msg.Field,
 			Value:   msg.Value,
 			Enabled: true,
 		}
 
-		isDuplicate := false
-		for i, f := range pnl.filters {
-			if f.Field == newFilter.Field && f.Value == newFilter.Value && f.Op == newFilter.Op {
-				isDuplicate = true
-				pnl.selectedFilterIdx = i
-				break
-			}
-		}
-
-		if !isDuplicate {
-			pnl.filters = append(pnl.filters, newFilter)
-			pnl.selectedFilterIdx = len(pnl.filters) - 1 // Position on new filter
-		}
+		pnl.filters, pnl.selectedFilterIdx = pnl.placeFilter(newFilter)
 
 		pnl.board = pnl.buildBoard()
-		// Apply current size to new board
-		sized, cmd := pnl.board.Update(board.SizeMsg{Width: pnl.width, Height: pnl.height})
-		pnl.board = sized.(board.Board)
-		return pnl, cmd
+		return pnl, nil
 
 	case SizeMsg:
 		pnl.width = msg.Width
 		pnl.height = msg.Height
-		sized, _ := pnl.board.Update(board.SizeMsg{Width: msg.Width, Height: msg.Height})
-		pnl.board = sized.(board.Board)
+		pnl.board, _ = pnl.board.Update(board.SizeMsg{Width: msg.Width, Height: msg.Height})
 		return pnl, nil
 
 	// Todo: these are an oddity??
@@ -150,17 +152,12 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					pnl.selectedFilterIdx--
 				}
 				pnl.board = pnl.buildBoard()
-				// Apply current size to new board
-				sized, cmd := pnl.board.Update(board.SizeMsg{Width: pnl.width, Height: pnl.height})
-				pnl.board = sized.(board.Board)
-				return pnl, cmd
 			}
 			return pnl, nil
 		default:
 			// Pass to board
 			var cmd tea.Cmd
-			updated, cmd := pnl.board.Update(msg)
-			pnl.board = updated.(board.Board)
+			pnl.board, cmd = pnl.board.Update(msg)
 			return pnl, cmd
 		}
 	}
@@ -198,44 +195,36 @@ func (pnl FilterPanel) applyCmd() tea.Cmd {
 	}
 }
 
-func (pnl FilterPanel) buildBoard() board.Board {
+func (pnl FilterPanel) buildBoard() tea.Model {
 	if len(pnl.filters) == 0 {
-		// Empty board with placeholder
-		brd, _ := board.New(
-			[]board.Rank{board.NewRank([]tea.Model{piece.NewLabel("(no filters)")})},
-			[]board.File{{Name: "", Width: 20}},
-			0, 0,
-		)
-		return brd
+		return board.NewPlaceholder("no filters")
 	}
 
 	var ranks []board.Rank
 	for _, f := range pnl.filters {
-		opIndex := 0
-		for i, op := range opStrings {
-			if opFromString[op] == f.Op {
-				opIndex = i
-				break
-			}
-		}
-
 		rank := board.NewRank([]tea.Model{
 			piece.NewCheckbox(f.Enabled),
 			piece.NewLabel(f.Field),
-			piece.NewOperator(opStrings, opIndex),
+			piece.NewOperator(opStrings, opIndex[f.Op]),
 			piece.NewTextInput(fmt.Sprintf("%v", f.Value), 50),
 		})
 		ranks = append(ranks, rank)
 	}
 
-	files := []board.File{
-		{Name: "", Width: 3},       // checkbox
-		{Name: "Field", Width: 15}, // field name
-		{Name: "Op", Width: 10},    // operator
-		{Name: "Value", Width: 30}, // value
-	}
-
-	brd, _ := board.New(ranks, files, pnl.selectedFilterIdx, 0) // Todo: handle error
+	brd, _ := board.NewToo(ranks, filterFiles, pnl.selectedFilterIdx, 0, pnl.width, pnl.height)
 	return brd
 }
 
+func (pnl FilterPanel) placeFilter(f nt.Filter) ([]nt.Filter, int) {
+	for i, existing := range pnl.filters {
+		if filtersMatch(existing, f) {
+			return pnl.filters, i
+		}
+	}
+	filters := append(pnl.filters, f)
+	return filters, len(filters) - 1
+}
+
+func filtersMatch(a, b nt.Filter) bool {
+	return a.Field == b.Field && a.Value == b.Value && a.Op == b.Op
+}

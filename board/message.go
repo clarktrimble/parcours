@@ -52,3 +52,13 @@ type SizeMsg struct {
 type ReplaceMsg struct {
 	Ranks []Rank
 }
+
+// AppendMsg adds a rank to the board
+type AppendMsg struct {
+	Rank Rank
+}
+
+// RemoveMsg removes a rank from the board
+type RemoveMsg struct {
+	Index int
+}

@@ -17,13 +17,6 @@ const (
 	headerHeight = 2 // Header row + separator line
 )
 
-// placeholder is a tea.Model that displays while waiting for data
-type placeholder struct{}
-
-func (placeholder) Init() tea.Cmd                       { return nil }
-func (placeholder) Update(tea.Msg) (tea.Model, tea.Cmd) { return placeholder{}, nil }
-func (placeholder) View() tea.View                      { return tea.NewView("Loading...") }
-
 // LinePanel displays paginated log lines using Board
 type LinePanel struct {
 	board tea.Model
@@ -60,7 +53,7 @@ func New(ctx context.Context, columns []nt.Column, fields []nt.Field, count int,
 		total:   count,
 		ctx:     ctx,
 		logger:  lgr,
-		board:   placeholder{},
+		board:   board.NewPlaceholder("Loading..."),
 	}
 	lp.buildColMap()
 	return lp
@@ -85,7 +78,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lp.lines = msg.Lines
 		lp.total = msg.Count
 
-		_, ok := lp.board.(placeholder)
+		_, ok := lp.board.(board.Placeholder)  // Todo: better way to check?
 		if ok {
 			lp.board, lp.files = lp.buildBoard()
 			return lp, nil
