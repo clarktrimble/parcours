@@ -4,6 +4,7 @@ import (
 	"image"
 	"slices"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -14,9 +15,14 @@ import (
 )
 
 const (
-	gutter       = 1 // space between columns
+	gutter       = 1  // space between columns
 	separator    = "-"
-	headerHeight = 2 // header row + separator line
+	headerHeight = 2  // header row + separator line
+	jumpBy       = 10 // ranks to scroll with alt+up/down
+
+	// Scroll acceleration
+	accelWindow = 200 * time.Millisecond // reset if no repeat within this window
+	accelMax    = 10                     // max step size
 )
 
 // Placeholder is a tea.Model that displays while waiting for data
@@ -88,6 +94,11 @@ type Board struct {
 
 	// Edit mode - when true, keys go to focused piece instead of nav
 	editMode bool
+
+	// Scroll acceleration
+	repeatDir   string
+	repeatTime  time.Time
+	repeatCount int
 }
 
 // New creates a Board from rank and file.
@@ -180,27 +191,37 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return brd, nil
 
 		case "up", "k":
-			return brd.move(NavUp)
+			return brd.accelMove(NavUp)
 		case "down", "j":
-			return brd.move(NavDown)
+			return brd.accelMove(NavDown)
 		case "left", "h":
-			return brd.move(NavLeft)
+			return brd.move(NavLeft, 1)
 		case "right", "l":
-			return brd.move(NavRight)
+			return brd.move(NavRight, 1)
 
-		case "g":
+		case "pgup":
+			return brd, func() tea.Msg {
+				return NavMsg{Direction: NavUp, Count: brd.height}
+			}
+
+		case "pgdown":
+			return brd, func() tea.Msg {
+				return NavMsg{Direction: NavDown, Count: brd.height}
+			}
+
+		case "alt+up":
+			return brd.move(NavUp, jumpBy)
+
+		case "alt+down":
+			return brd.move(NavDown, jumpBy)
+
+		case "g", "alt+pgup":
 			brd.position.rank = 0
 			return brd, tea.Batch(brd.positionCmd(), navCmd(NavTop))
 
-		case "G":
+		case "G", "alt+pgdown":
 			brd.position.rank = brd.height - 1
 			return brd, tea.Batch(brd.positionCmd(), navCmd(NavBottom))
-
-		case "pgup", "ctrl+u":
-			return brd, navCmd(NavPageUp)
-
-		case "pgdown", "ctrl+d":
-			return brd, navCmd(NavPageDown)
 		}
 	}
 
@@ -405,24 +426,57 @@ func (brd Board) positionCmd() tea.Cmd {
 }
 
 func navCmd(dir string) tea.Cmd {
-	return func() tea.Msg { return NavMsg{Direction: dir} }
+	return func() tea.Msg { return NavMsg{Direction: dir, Count: 1} }
 }
 
-func (brd Board) move(dir string) (Board, tea.Cmd) {
+// accelMove moves with acceleration - step size increases with rapid repeats
+func (brd Board) accelMove(dir string) (Board, tea.Cmd) {
+	now := time.Now()
+	if brd.repeatDir == dir && now.Sub(brd.repeatTime) < accelWindow {
+		brd.repeatCount++
+	} else {
+		brd.repeatCount = 1
+		brd.repeatDir = dir
+	}
+	brd.repeatTime = now
+	step := min(brd.repeatCount, accelMax)
+	return brd.move(dir, step)
+}
 
+// move moves the cursor by n in the given direction.
+// If the move exceeds the board boundary, cursor stops at the edge
+// and a NavMsg is emitted with the remaining count for the parent to handle.
+// Note: positionCmd is always emitted at boundary even if cursor didn't move.
+func (brd Board) move(dir string, n int) (Board, tea.Cmd) {
 	switch dir {
 	case NavUp:
-		if brd.position.rank == 0 {
-			return brd, navCmd(NavUp)
+		if brd.position.rank >= n {
+			brd.position.rank -= n
+			return brd, brd.positionCmd()
 		}
-		brd.position.rank--
+		// Hit top boundary
+		remainder := n - brd.position.rank
+		brd.position.rank = 0
+		return brd, tea.Batch(
+			brd.positionCmd(),
+			func() tea.Msg { return NavMsg{Direction: NavUp, Count: remainder} },
+		)
 
 	case NavDown:
-		if brd.position.rank == brd.height-1 {
-			return brd, navCmd(NavDown)
+		maxRank := brd.height - 1
+		if brd.position.rank+n <= maxRank {
+			brd.position.rank += n
+			return brd, brd.positionCmd()
 		}
-		brd.position.rank++
+		// Hit bottom boundary
+		remainder := n - (maxRank - brd.position.rank)
+		brd.position.rank = maxRank
+		return brd, tea.Batch(
+			brd.positionCmd(),
+			func() tea.Msg { return NavMsg{Direction: NavDown, Count: remainder} },
+		)
 
+	// Horizontal movement ignores n for now
 	case NavLeft:
 		if brd.position.file == 0 {
 			return brd, nil

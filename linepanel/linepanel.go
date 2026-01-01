@@ -12,7 +12,6 @@ import (
 	"parcours/message"
 )
 
-
 const (
 	headerHeight = 2 // Header row + separator line
 )
@@ -78,7 +77,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lp.lines = msg.Lines
 		lp.total = msg.Count
 
-		_, ok := lp.board.(board.Placeholder)  // Todo: better way to check?
+		_, ok := lp.board.(board.Placeholder) // Todo: better way to check?
 		if ok {
 			lp.board, lp.files = lp.buildBoard()
 			return lp, nil
@@ -111,41 +110,27 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lp.scrollingDown = false // default to upward/top positioning
 		switch msg.Direction {
 		case board.NavDown:
-			// Scroll down one line
+			// Scroll down by msg.Ranks
 			if lp.offset+pageSize < lp.total {
-				lp.offset++
+				lp.offset += msg.Count
 				lp.scrollingDown = true
 				lp.ensureFullPage(pageSize)
 				return lp, message.GetPageCmd(lp.offset, pageSize)
 			}
-		case board.NavUp:
-			// Scroll up one line
-			if lp.offset > 0 {
-				lp.offset--
-				return lp, message.GetPageCmd(lp.offset, pageSize)
-			}
-		case board.NavPageDown:
-			// Jump to next page
-			if lp.offset+pageSize < lp.total {
-				lp.offset += pageSize
-				lp.scrollingDown = true
-				lp.ensureFullPage(pageSize)
-				return lp, message.GetPageCmd(lp.offset, pageSize)
-			}
-			// Already at end, move cursor to bottom directly
+			// Can't scroll further, move cursor to bottom
 			var cmd tea.Cmd
 			lp.board, cmd = lp.board.Update(board.MoveToMsg{MoveTo: board.Bottom})
 			return lp, cmd
-		case board.NavPageUp:
-			// Jump to previous page
+		case board.NavUp:
+			// Scroll up by msg.Ranks
 			if lp.offset > 0 {
-				lp.offset -= pageSize
+				lp.offset -= msg.Count
 				if lp.offset < 0 {
 					lp.offset = 0
 				}
 				return lp, message.GetPageCmd(lp.offset, pageSize)
 			}
-			// Already at top, move cursor to top directly
+			// Can't scroll further, move cursor to top
 			var cmd tea.Cmd
 			lp.board, cmd = lp.board.Update(board.MoveToMsg{MoveTo: board.Top})
 			return lp, cmd
@@ -325,3 +310,4 @@ func (lp LinePanel) cellAt(rank, file int) (field string, value nt.Value, err er
 	value = lp.lines[rank].Values[fieldIndex]
 	return
 }
+

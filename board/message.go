@@ -14,19 +14,18 @@ type PositionMsg struct {
 
 // Navigation directions
 const (
-	NavUp       = "up"
-	NavDown     = "down"
-	NavLeft     = "left"
-	NavRight    = "right"
-	NavPageUp   = "pageup"
-	NavPageDown = "pagedown"
-	NavTop      = "top"
-	NavBottom   = "bottom"
+	NavUp     = "up"
+	NavDown   = "down"
+	NavLeft   = "left"
+	NavRight  = "right"
+	NavTop    = "top"
+	NavBottom = "bottom"
 )
 
 // NavMsg signals navigation that hit a boundary
 type NavMsg struct {
 	Direction string
+	Count     int
 }
 
 // MoveTo positions
