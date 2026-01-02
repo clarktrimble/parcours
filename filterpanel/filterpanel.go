@@ -211,7 +211,7 @@ func (pnl FilterPanel) buildBoard() tea.Model {
 		ranks = append(ranks, rank)
 	}
 
-	brd, _ := board.NewToo(ranks, filterFiles, pnl.selectedFilterIdx, 0, pnl.width, pnl.height)
+	brd, _ := board.New(ranks, filterFiles, pnl.selectedFilterIdx, 0, pnl.width, pnl.height)
 	return brd
 }
 

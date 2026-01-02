@@ -11,6 +11,11 @@ import (
 // Todo: full page of lines yeah?
 // Todo: fold per column (when value repeats)
 
+// Todo: why do I need to reset term after?  (less page/scroll up/down is broken in git diff)
+// Todo: linepanel out of range errors after changing font size,  do we get a size msg?
+// Todo: try to "stick" to current line id when applying/removing filters
+// Todo: slower accel ramp, sensible params
+
 // Store specifies a backing datastore.
 // Todo: rename Get/Set View
 // Todo: we now rely on col order from Store, arrange to set

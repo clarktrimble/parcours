@@ -7,7 +7,6 @@ import (
 	"github.com/pkg/errors"
 
 	"parcours/board"
-	"parcours/board/piece"
 	nt "parcours/entity"
 	"parcours/message"
 )
@@ -32,10 +31,9 @@ type LinePanel struct {
 	colMap  map[string]nt.Column // Cached map of field name to column config
 
 	// Current cell info (derived from board position)
-	files        []board.File // visible files
-	fieldIndices []int        // maps file index to field index in line.Values
-	currentRank  int
-	currentFile  int
+	files       []board.File // visible files (SrcIdx maps to line.Values)
+	currentRank int
+	currentFile int
 
 	// Size
 	width  int
@@ -79,11 +77,15 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		_, ok := lp.board.(board.Placeholder) // Todo: better way to check?
 		if ok {
-			lp.board, lp.files = lp.buildBoard()
+			var err error
+			lp.board, lp.files, err = lp.buildBoard()
+			if err != nil {
+				return lp, func() tea.Msg { return err }
+			}
 			return lp, nil
 		}
 
-		ranks := lp.buildRanks()
+		ranks := lp.buildRanks(lp.files)
 		var cmd tea.Cmd
 		lp.board, cmd = lp.board.Update(board.ReplaceMsg{Ranks: ranks})
 		return lp, cmd
@@ -222,29 +224,6 @@ func (lp LinePanel) View() tea.View {
 	return lp.board.View()
 }
 
-// buildRanks converts current lines into board Ranks
-func (lp LinePanel) buildRanks() []board.Rank {
-	var ranks []board.Rank
-	for _, line := range lp.lines {
-		var pieces []tea.Model
-		for i, val := range line.Values {
-			if i >= len(lp.fields) {
-				continue
-			}
-			field := lp.fields[i]
-			col, exists := lp.colMap[field.Name]
-			if !exists || col.Hidden || col.Demote {
-				continue
-			}
-			formatter := makeFormatter(field.Type, col.Format)
-			// Todo: add truncate with ellipsis to formatter yah
-			pieces = append(pieces, piece.NewValue(val, formatter))
-		}
-		ranks = append(ranks, board.NewRank(pieces))
-	}
-	return ranks
-}
-
 // makeFormatter creates a formatter function based on field type and format string
 // Todo: un-trainwreck
 func makeFormatter(fieldType, format string) func(nt.Value) string {
@@ -262,52 +241,18 @@ func makeFormatter(fieldType, format string) func(nt.Value) string {
 	}
 }
 
-// buildBoard converts current lines and columns into a Board
-// Todo: rethink Board genisis, like totally
-func (lp *LinePanel) buildBoard() (board.Board, []board.File) {
-	var files []board.File
-	lp.fieldIndices = lp.fieldIndices[:0]
-	for i, field := range lp.fields {
-		col, exists := lp.colMap[field.Name]
-		if !exists || col.Hidden || col.Demote {
-			continue
-		}
-		files = append(files, board.File{Name: field.Name, Width: col.Width})
-		lp.fieldIndices = append(lp.fieldIndices, i)
-	}
-
-	ranks := lp.buildRanks()
-
-	// Position board based on last navigation direction
-	startRank := 0
-	if lp.scrollingDown {
-		startRank = len(ranks) - 1
-	}
-
-	brd, _ := board.New(ranks, files, startRank, 0)
-
-	// Apply current viewport size to new board
-	if lp.width > 0 {
-		sized, _ := brd.Update(board.SizeMsg{Width: lp.width, Height: lp.height})
-		brd = sized.(board.Board) // Todo: unfuck
-	}
-
-	return brd, files
-}
-
 // cellAt returns the field name and value at the given board position
 func (lp LinePanel) cellAt(rank, file int) (field string, value nt.Value, err error) {
 	if file < 0 || file >= len(lp.files) || rank < 0 || rank >= len(lp.lines) {
 		err = errors.Errorf("cell out of range: file=%d, rank=%d", file, rank)
 		return
 	}
-	fieldIndex := lp.fieldIndices[file]
-	if fieldIndex < 0 || fieldIndex >= len(lp.lines[rank].Values) {
-		err = errors.Errorf("fieldIndex out of range: %d", fieldIndex)
+	f := lp.files[file]
+	if f.SrcIdx >= len(lp.lines[rank].Values) {
+		err = errors.Errorf("SrcIdx out of range: %d", f.SrcIdx)
 		return
 	}
-	field = lp.files[file].Name
-	value = lp.lines[rank].Values[fieldIndex]
+	field = f.Name
+	value = lp.lines[rank].Values[f.SrcIdx]
 	return
 }
-

@@ -44,8 +44,9 @@ func (p Placeholder) View() tea.View {
 // File represents a file down the board.
 // Has ambitions to carry type and/or formatter for its pieces.
 type File struct {
-	Name  string
-	Width int
+	Name   string
+	Width  int
+	SrcIdx int // Index into source data
 }
 
 // PieceMsg is the interface for messages from interactive pieces.
@@ -101,35 +102,26 @@ type Board struct {
 	repeatCount int
 }
 
-// New creates a Board from rank and file.
+// New creates a Board with viewport size.
 // Todo: pass style config instead of importing parcours/style
-func New(ranks []Rank, files []File, rank, file int) (board Board, err error) {
-
-	board = Board{
-		ranks:    ranks,
-		files:    files,
-		width:    len(files),
-		height:   len(ranks),
-		position: position{file: file, rank: rank},
+func New(ranks []Rank, files []File, rank, file, vpw, vph int) (Board, error) {
+	brd := Board{
+		ranks:       ranks,
+		files:       files,
+		width:       len(files),
+		height:      len(ranks),
+		position:    position{file: file, rank: rank},
+		vpw:         vpw,
+		vph:         vph,
+		initialized: true,
 	}
 
-	err = board.validate()
-	if err != nil {
-		return
-	}
-	board.setPositions()
-	return
-}
-
-// NewToo creates a Board with viewport size. Todo: consolidate with New
-func NewToo(ranks []Rank, files []File, rank, file, vpw, vph int) (Board, error) {
-	brd, err := New(ranks, files, rank, file)
+	err := brd.validate()
 	if err != nil {
 		return brd, err
 	}
-	brd.vpw = vpw
-	brd.vph = vph
-	brd.initialized = true
+
+	brd.setPositions()
 	brd = brd.updateLayout()
 	return brd, nil
 }
@@ -285,6 +277,13 @@ func (brd *Board) setPositions() {
 func (brd Board) replace(ranks []Rank) (board Board, err error) {
 
 	brd.ranks = ranks
+	brd.height = len(ranks)
+
+	// Clamp cursor if new height is smaller
+	if brd.position.rank >= brd.height {
+		brd.position.rank = max(0, brd.height-1)
+	}
+
 	err = brd.validate()
 	if err != nil {
 		return
