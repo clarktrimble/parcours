@@ -31,7 +31,7 @@ type LinePanel struct {
 	colMap  map[string]nt.Column // Cached map of field name to column config
 
 	// Current cell info (derived from board position)
-	files       []board.File // visible files (SrcIdx maps to line.Values)
+	files       board.Files // visible files (SrcIdx maps to line.Values)
 	currentRank int
 	currentFile int
 
@@ -74,21 +74,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PageMsg:
 		lp.lines = msg.Lines
 		lp.total = msg.Count
-
-		_, ok := lp.board.(board.Placeholder) // Todo: better way to check?
-		if ok {
-			var err error
-			lp.board, lp.files, err = lp.buildBoard()
-			if err != nil {
-				return lp, func() tea.Msg { return err }
-			}
-			return lp, nil
-		}
-
-		ranks := lp.buildRanks(lp.files)
-		var cmd tea.Cmd
-		lp.board, cmd = lp.board.Update(board.ReplaceMsg{Ranks: ranks})
-		return lp, cmd
+		return lp.applyPage()
 
 	case ColumnsMsg:
 		lp.columns = msg.Columns
@@ -222,23 +208,6 @@ func (lp LinePanel) filterCmd() tea.Cmd {
 
 func (lp LinePanel) View() tea.View {
 	return lp.board.View()
-}
-
-// makeFormatter creates a formatter function based on field type and format string
-// Todo: un-trainwreck
-func makeFormatter(fieldType, format string) func(nt.Value) string {
-	if format != "" && fieldType == "TIMESTAMP" {
-		return func(val nt.Value) string {
-			t, err := val.Time()
-			if err == nil {
-				return t.Format(format)
-			}
-			return val.String()
-		}
-	}
-	return func(v nt.Value) string {
-		return v.String()
-	}
 }
 
 // cellAt returns the field name and value at the given board position

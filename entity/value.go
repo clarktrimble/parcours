@@ -12,6 +12,9 @@ type Value struct {
 	Raw any
 }
 
+// Formatter converts a Value to a display string.
+type Formatter func(Value) string
+
 // String returns the value as a string.
 func (v Value) String() string {
 	if v.Raw == nil {

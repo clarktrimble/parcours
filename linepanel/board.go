@@ -5,51 +5,61 @@ import (
 	"parcours/board/piece"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/pkg/errors"
 )
 
-// buildFiles builds board files from column config
-func (lp LinePanel) buildFiles() []board.File {
-	var files []board.File
+// buildRankAndFile builds board files and ranks together in one pass
+func (lp LinePanel) buildRankAndFile() (files board.Files, ranks board.Ranks, err error) {
+	ranks = make(board.Ranks, len(lp.lines))
+
 	for i, field := range lp.fields {
 		col, exists := lp.colMap[field.Name]
 		if !exists || col.Hidden || col.Demote {
 			continue
 		}
 		files = append(files, board.File{Name: field.Name, Width: col.Width, SrcIdx: i})
-	}
-	return files
-}
+		formatter := getFormatter(col.Format, col.Width)
 
-// buildRanks converts current lines into board Ranks
-func (lp LinePanel) buildRanks(files []board.File) []board.Rank {
-	ranks := make([]board.Rank, 0, len(lp.lines))
-	for _, line := range lp.lines {
-		pieces := make([]tea.Model, 0, len(files))
-		for _, f := range files {
-			if f.SrcIdx >= len(line.Values) {
-				continue
+		for lineIdx, line := range lp.lines {
+			if i >= len(line.Values) {
+				err = errors.Errorf("field %s out of range for line %d", field.Name, lineIdx)
+				return
 			}
-			field := lp.fields[f.SrcIdx]
-			col := lp.colMap[field.Name]
-			formatter := makeFormatter(field.Type, col.Format)
-			pieces = append(pieces, piece.NewValue(line.Values[f.SrcIdx], formatter))
+			ranks[lineIdx].Append(piece.NewValue(line.Values[i], formatter))
 		}
-		ranks = append(ranks, board.NewRank(pieces))
 	}
-	return ranks
+
+	return
 }
 
-// buildBoard converts current lines and columns into a Board
-func (lp LinePanel) buildBoard() (board.Board, []board.File, error) {
-	files := lp.buildFiles()
-	ranks := lp.buildRanks(files)
+// applyPage builds rank and file from current lines and updates the board
+func (lp LinePanel) applyPage() (LinePanel, tea.Cmd) {
+	// Build files (columns) and ranks (rows) together from current lines
+	files, ranks, err := lp.buildRankAndFile()
+	if err != nil {
+		return lp, func() tea.Msg { return err }
+	}
 
-	// Position board based on last navigation direction
+	// Column structure unchanged (just scrolled) - replace ranks only,
+	// preserving board state like cursor position
+	if lp.files.Equal(files) {
+		var cmd tea.Cmd
+		lp.board, cmd = lp.board.Update(board.ReplaceMsg{Ranks: ranks})
+		return lp, cmd
+	}
+
+	// Column structure changed (initial load, columns added/removed/resized),
+	// rebuild the entire board
+	lp.files = files
+	// Position cursor at bottom if we were scrolling down, else top
 	startRank := 0
 	if lp.scrollingDown {
 		startRank = len(ranks) - 1
 	}
-
-	brd, err := board.New(ranks, files, startRank, 0, lp.width, lp.height)
-	return brd, files, err
+	lp.board, err = board.New(ranks, files, startRank, 0, lp.width, lp.height)
+	if err != nil {
+		return lp, func() tea.Msg { return err }
+	}
+	return lp, nil
 }
+

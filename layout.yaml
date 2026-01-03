@@ -6,7 +6,7 @@
 columns:
   - field: timestamp
     width: 14
-    format: "15:04:05.000"
+    format: fourzed
   - field: level
     width: 6
   - field: message

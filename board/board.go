@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	gutter       = 1  // space between columns
+	gutter       = 1 // space between columns
 	separator    = "-"
 	headerHeight = 2  // header row + separator line
 	jumpBy       = 10 // ranks to scroll with alt+up/down
@@ -49,6 +49,22 @@ type File struct {
 	SrcIdx int // Index into source data
 }
 
+// Files is a slice of File with comparison support.
+type Files []File
+
+// Equal returns true if both slices have the same files.
+func (f Files) Equal(other Files) (equal bool) {
+	if len(f) != len(other) {
+		return
+	}
+	for i := range f {
+		if f[i].Name != other[i].Name || f[i].Width != other[i].Width {
+			return
+		}
+	}
+	return true
+}
+
 // PieceMsg is the interface for messages from interactive pieces.
 type PieceMsg interface {
 	IsPieceMsg()
@@ -74,6 +90,14 @@ func NewRank(pieces []tea.Model) Rank {
 	}
 	return Rank{squares: squares}
 }
+
+// Append adds a piece to the rank.
+func (r *Rank) Append(piece tea.Model) {
+	r.squares = append(r.squares, Square{piece: piece})
+}
+
+// Ranks is a slice of Rank.
+type Ranks []Rank
 
 // Board represents a grid of squares with ranks and files.
 type Board struct {
@@ -401,18 +425,6 @@ func drawRanks(canvas *lipgloss.Canvas, ranks []Rank, start, end int, areas []im
 			rectangles[i].Max.Y++
 		}
 	}
-}
-
-// Todo: save this func til we find a home for it in linepanel or value piece
-func truncate(s string, width int) string {
-	if width <= 0 {
-		return s
-	}
-	runes := []rune(s)
-	if len(runes) <= width {
-		return s
-	}
-	return string(runes[:width-1]) + style.MutedStyle.Render("…")
 }
 
 // positionCmd returns a command that sends the current cursor position
