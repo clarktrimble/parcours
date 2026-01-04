@@ -39,4 +39,3 @@ columns:
     demote: true
     json: true
 
-# Todo: pluralize field(s)

@@ -74,7 +74,10 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PageMsg:
 		lp.lines = msg.Lines
 		lp.total = msg.Count
-		return lp.applyPage()
+		lp, cmd := lp.applyPage()
+		return lp, tea.Batch(cmd, func() tea.Msg {
+			return message.CountMsg{Count: msg.Count}
+		})
 
 	case ColumnsMsg:
 		lp.columns = msg.Columns

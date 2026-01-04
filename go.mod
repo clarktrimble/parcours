@@ -5,6 +5,7 @@ go 1.25.1
 require (
 	charm.land/bubbletea/v2 v2.0.0-rc.2
 	charm.land/lipgloss/v2 v2.0.0-beta.3.0.20251121225325-f6fbdf23b0ff
+	github.com/charmbracelet/ultraviolet v0.0.0-20251120225753-26363bddd922
 	github.com/clarktrimble/sabot v0.0.7
 	github.com/marcboeker/go-duckdb v1.8.5
 	github.com/pkg/errors v0.9.1
@@ -14,7 +15,6 @@ require (
 require (
 	github.com/apache/arrow-go/v18 v18.1.0 // indirect
 	github.com/charmbracelet/colorprofile v0.3.3 // indirect
-	github.com/charmbracelet/ultraviolet v0.0.0-20251120225753-26363bddd922 // indirect
 	github.com/charmbracelet/x/ansi v0.11.1 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect
 	github.com/charmbracelet/x/termios v0.1.1 // indirect

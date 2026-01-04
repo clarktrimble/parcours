@@ -56,7 +56,7 @@ func (lp LinePanel) applyPage() (LinePanel, tea.Cmd) {
 	if lp.scrollingDown {
 		startRank = len(ranks) - 1
 	}
-	lp.board, err = board.New(ranks, files, startRank, 0, lp.width, lp.height)
+	lp.board, err = board.New(ranks, files, startRank, 0, lp.width)
 	if err != nil {
 		return lp, func() tea.Msg { return err }
 	}

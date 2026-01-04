@@ -2,7 +2,6 @@ package board
 
 import (
 	"image"
-	"slices"
 	"strings"
 	"time"
 
@@ -10,8 +9,6 @@ import (
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/pkg/errors"
-
-	"parcours/style"
 )
 
 const (
@@ -23,6 +20,12 @@ const (
 	// Scroll acceleration
 	accelWindow = 200 * time.Millisecond // reset if no repeat within this window
 	accelMax    = 10                     // max step size
+)
+
+var (
+	tableBorderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	hlRowStyle       = lipgloss.NewStyle().Background(lipgloss.Color("235"))
+	hlCellStyle      = lipgloss.NewStyle().Background(lipgloss.Color("237"))
 )
 
 // Placeholder is a tea.Model that displays while waiting for data
@@ -62,7 +65,8 @@ func (f Files) Equal(other Files) (equal bool) {
 			return
 		}
 	}
-	return true
+	equal = true
+	return
 }
 
 // PieceMsg is the interface for messages from interactive pieces.
@@ -107,15 +111,15 @@ type Board struct {
 	width    int // Number of files
 	height   int // Number of ranks
 
-	// Viewport
+	// Viewport (height from length of ranks)
 	vpw         int
-	vph         int
 	initialized bool
 	fileOffset  int // Index of leftmost visible file (for horizontal scrolling)
 
 	// Layout cache - updated when fileOffset or viewport changes
-	layoutAreas []image.Rectangle
-	layoutEnd   int // Index (exclusive) of last file to draw
+	rankAreas []image.Rectangle
+	fileEnd   int // Index (exclusive) of last file to draw
+	fullSpan  int
 
 	// Edit mode - when true, keys go to focused piece instead of nav
 	editMode bool
@@ -127,8 +131,7 @@ type Board struct {
 }
 
 // New creates a Board with viewport size.
-// Todo: pass style config instead of importing parcours/style
-func New(ranks []Rank, files []File, rank, file, vpw, vph int) (Board, error) {
+func New(ranks []Rank, files []File, rank, file, vpw int) (Board, error) {
 	brd := Board{
 		ranks:       ranks,
 		files:       files,
@@ -136,7 +139,6 @@ func New(ranks []Rank, files []File, rank, file, vpw, vph int) (Board, error) {
 		height:      len(ranks),
 		position:    position{file: file, rank: rank},
 		vpw:         vpw,
-		vph:         vph,
 		initialized: true,
 	}
 
@@ -160,7 +162,6 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case SizeMsg:
 		brd.vpw = msg.Width
-		brd.vph = msg.Height
 		brd.initialized = true
 		return brd.checkFileOffset(), nil
 
@@ -170,14 +171,6 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return brd, func() tea.Msg { return err }
 		}
 		return newBrd, newBrd.positionCmd()
-
-		/*
-			case AppendMsg:
-				return brd.appendRank(msg.Rank)
-
-			case RemoveMsg:
-				return brd.removeRank(msg.Index)
-		*/
 
 	case MoveToMsg:
 		switch msg.MoveTo {
@@ -263,19 +256,8 @@ func (brd Board) View() tea.View {
 	}
 
 	canvas := lipgloss.NewCanvas(brd.vpw, headerHeight+len(brd.ranks))
-
-	files := brd.files[brd.fileOffset:brd.layoutEnd]
-	drawHeaders(canvas, files, brd.layoutAreas)
-
-	// Shift areas to data row (after header + separator)
-	areas := slices.Clone(brd.layoutAreas)
-	nextY := brd.layoutAreas[0].Max.Y + 1 // Todo: dont crash
-	for i := range areas {
-		areas[i].Min.Y = nextY
-		areas[i].Max.Y = nextY + 1
-	}
-	drawRanks(canvas, brd.ranks, brd.fileOffset, brd.layoutEnd, areas)
-	brd.drawHighlight(canvas, areas)
+	brd.draw(canvas)
+	brd.drawHighlight(canvas)
 
 	return tea.NewView(canvas)
 }
@@ -285,6 +267,25 @@ func (brd Board) View() tea.View {
 type position struct {
 	rank int
 	file int
+}
+
+// areasIter yields drawing areas at successive vertical offsets
+type areasIter struct {
+	template []image.Rectangle
+	areas    []image.Rectangle
+	offset   int
+}
+
+func newAreasIter(template []image.Rectangle) *areasIter {
+	return &areasIter{template: template, areas: make([]image.Rectangle, len(template)), offset: 0}
+}
+
+func (ai *areasIter) next() []image.Rectangle {
+	for i, t := range ai.template {
+		ai.areas[i] = image.Rect(t.Min.X, ai.offset, t.Max.X, ai.offset+1)
+	}
+	ai.offset++
+	return ai.areas
 }
 
 func (brd *Board) setPositions() {
@@ -318,48 +319,12 @@ func (brd Board) replace(ranks []Rank) (board Board, err error) {
 	return
 }
 
-/*
-func (brd Board) appendRank(rank Rank) (Board, tea.Cmd) {
-	brd.ranks = append(brd.ranks, rank)
-	brd.height++
-	brd.setPositionForRank(brd.height - 1)
-	return brd, nil
-}
-
-func (brd Board) removeRank(index int) (Board, tea.Cmd) {
-	if index < 0 || index >= brd.height {
-		return brd, nil
-	}
-	brd.ranks = append(brd.ranks[:index], brd.ranks[index+1:]...)
-	brd.height--
-	// Adjust cursor if needed
-	if brd.position.rank >= brd.height && brd.height > 0 {
-		brd.position.rank = brd.height - 1
-	}
-	if brd.height == 0 {
-		brd.position.rank = 0
-	}
-	// Reindex positions for ranks after deleted one
-	for r := index; r < brd.height; r++ {
-		brd.setPositionForRank(r)
-	}
-	return brd, brd.positionCmd()
-}
-
-func (brd *Board) setPositionForRank(r int) {
-	for f := range brd.ranks[r].squares {
-		piece := brd.ranks[r].squares[f].piece
-		updated, _ := piece.Update(PositionMsg{Rank: r, File: f})
-		brd.ranks[r].squares[f].piece = updated
-	}
-}
-*/
-
 // applyBgToArea sets the background color on all cells in the given area
 func applyBgToArea(canvas *lipgloss.Canvas, x, y, width int, sty lipgloss.Style) {
-	// Todo: dont style beyond last col
+
 	bg := sty.GetBackground()
 	for cx := x; cx < x+width; cx++ {
+
 		cell := canvas.CellAt(cx, y)
 		if cell != nil {
 			cell.Style.Bg = bg
@@ -369,60 +334,55 @@ func applyBgToArea(canvas *lipgloss.Canvas, x, y, width int, sty lipgloss.Style)
 }
 
 func (brd Board) updateLayout() Board {
-	brd.layoutAreas = brd.layoutAreas[:0]
+	// Todo: look at naming and comment properly
+	// Clear previous layout
+	brd.rankAreas = brd.rankAreas[:0]
+
 	x := 0
 	for i := brd.fileOffset; i < len(brd.files); i++ {
+		// Stop when viewport is full
 		if x >= brd.vpw {
 			break
 		}
+		// Add column rect at header row (Y=0)
 		w := brd.files[i].Width
-		brd.layoutAreas = append(brd.layoutAreas, image.Rect(x, 0, x+w, 1))
+		brd.rankAreas = append(brd.rankAreas, image.Rect(x, 0, x+w, 1))
 		x += w + gutter
-		brd.layoutEnd = i + 1
+		brd.fileEnd = i + 1
 	}
+	brd.fullSpan = x - gutter
 	return brd
 }
 
-func (brd Board) drawHighlight(canvas *lipgloss.Canvas, areas []image.Rectangle) {
-	selectedY := areas[0].Min.Y + brd.position.rank // Todo: dont crash
+func (brd Board) drawHighlight(canvas *lipgloss.Canvas) {
+	selectedY := headerHeight + brd.position.rank
 	visualFile := brd.position.file - brd.fileOffset
-	cellArea := areas[visualFile]
+	cellArea := brd.rankAreas[visualFile]
 
-	rankArea := fullSpan(areas, selectedY)
-	applyBgToArea(canvas, rankArea.Min.X, rankArea.Min.Y, rankArea.Dx(), style.HlRowStyle)
-	applyBgToArea(canvas, cellArea.Min.X, selectedY, cellArea.Dx(), style.HlCellStyle)
+	applyBgToArea(canvas, 0, selectedY, brd.fullSpan, hlRowStyle)
+	applyBgToArea(canvas, cellArea.Min.X, selectedY, cellArea.Dx(), hlCellStyle)
 }
 
-func fullSpan(areas []image.Rectangle, y int) image.Rectangle {
-	if len(areas) == 0 {
-		return image.Rectangle{}
-	}
-	return image.Rect(areas[0].Min.X, y, areas[len(areas)-1].Max.X, y+1)
-}
+func (brd Board) draw(canvas *lipgloss.Canvas) {
+	areas := newAreasIter(brd.rankAreas)
 
-func drawHeaders(canvas *lipgloss.Canvas, files []File, areas []image.Rectangle) {
-	for i, file := range files {
-		uv.NewStyledString(file.Name).Draw(canvas, areas[i])
+	// Headers
+	hdrs := areas.next()
+	for i, file := range brd.files[brd.fileOffset:brd.fileEnd] {
+		uv.NewStyledString(file.Name).Draw(canvas, hdrs[i])
 	}
 
-	area := fullSpan(areas, areas[0].Max.Y)
-	str := strings.Repeat(separator, area.Dx())
-	uv.NewStyledString(style.TableBorderStyle.Render(str)).Draw(canvas, area)
-}
+	// Separator
+	areas.next()
+	sepArea := image.Rect(0, areas.offset-1, brd.fullSpan, areas.offset)
+	str := strings.Repeat(separator, brd.fullSpan)
+	uv.NewStyledString(tableBorderStyle.Render(str)).Draw(canvas, sepArea)
 
-func drawRank(canvas *lipgloss.Canvas, squares []Square, areas []image.Rectangle) {
-	for i, square := range squares {
-		square.piece.View().Content.Draw(canvas, areas[i])
-	}
-}
-
-func drawRanks(canvas *lipgloss.Canvas, ranks []Rank, start, end int, areas []image.Rectangle) {
-	rectangles := slices.Clone(areas)
-	for _, rank := range ranks {
-		drawRank(canvas, rank.squares[start:end], rectangles)
-		for i := range rectangles {
-			rectangles[i].Min.Y++
-			rectangles[i].Max.Y++
+	// Ranks
+	for _, rank := range brd.ranks {
+		rects := areas.next()
+		for i, square := range rank.squares[brd.fileOffset:brd.fileEnd] {
+			square.piece.View().Content.Draw(canvas, rects[i])
 		}
 	}
 }
@@ -507,33 +467,27 @@ func (brd Board) move(dir string, n int) (Board, tea.Cmd) {
 }
 
 func (brd Board) checkFileOffset() Board {
-	if brd.position.file < brd.fileOffset {
+	switch {
+	case brd.position.file < brd.fileOffset:
 		brd.fileOffset = brd.position.file
-		return brd.updateLayout()
-	}
-	if brd.position.file >= brd.layoutEnd {
-		for offset := brd.fileOffset + 1; offset <= brd.position.file; offset++ {
-			if brd.fileVisibleFrom(offset, brd.position.file) {
-				brd.fileOffset = offset
-				return brd.updateLayout()
-			}
-		}
-		brd.fileOffset = brd.position.file
-		return brd.updateLayout()
+	case brd.position.file >= brd.fileEnd:
+		brd.fileOffset = brd.offsetFor(brd.position.file)
+	default:
+		return brd
 	}
 	return brd.updateLayout()
 }
 
-func (brd Board) fileVisibleFrom(offset, file int) bool {
-	// Todo: can be more efficient? (find last visible?)
-	x := 0
-	for i := offset; i <= file; i++ {
-		if x+brd.files[i].Width > brd.vpw {
-			return false
+// offsetFor calculates the offset which will lead to a given file being shown at the right edge of board
+func (brd Board) offsetFor(file int) int {
+	var width int
+	for i := file; i >= 0; i-- {
+		width += brd.files[i].Width + gutter
+		if width-gutter > brd.vpw {
+			return i + 1
 		}
-		x += brd.files[i].Width + gutter
 	}
-	return true
+	return 0
 }
 
 func (brd Board) validate() error {

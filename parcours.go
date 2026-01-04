@@ -15,6 +15,9 @@ import (
 // Todo: linepanel out of range errors after changing font size,  do we get a size msg?
 // Todo: try to "stick" to current line id when applying/removing filters
 // Todo: slower accel ramp, sensible params
+// Todo: look over filter -> ducksql,
+// Todo: bug "board requires non-zero ranks and files" when  filtering to 0 lines
+// Todo: rethink key-binds holistically
 
 // Store specifies a backing datastore.
 // Todo: rename Get/Set View

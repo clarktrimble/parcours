@@ -5,14 +5,11 @@ import (
 
 	"parcours/detail"
 	"parcours/linepanel"
-	"parcours/message"
 )
 
 // getPage gets a page of lines from the store
 func (m Model) getPage(offset, size int) tea.Cmd {
-
 	return func() tea.Msg {
-
 		_, count, err := m.Store.GetView()
 		if err != nil {
 			return err
@@ -23,18 +20,10 @@ func (m Model) getPage(offset, size int) tea.Cmd {
 			return err
 		}
 
-		return tea.Batch(
-			func() tea.Msg {
-				return linepanel.PageMsg{
-					Lines: linesData,
-					Count: count,
-				}
-			},
-			func() tea.Msg {
-				return message.CountMsg{Count: count}
-			},
-		)() // Todo: some other way?
-		//) // Todo: some other way?
+		return linepanel.PageMsg{
+			Lines: linesData,
+			Count: count,
+		}
 	}
 }
 
