@@ -13,7 +13,7 @@ import (
 
 const (
 	gutter       = 1 // space between columns
-	separator    = "-"
+	separator    = "─"
 	headerHeight = 2  // header row + separator line
 	jumpBy       = 10 // ranks to scroll with alt+up/down
 
@@ -105,41 +105,36 @@ type Ranks []Rank
 
 // Board represents a grid of squares with ranks and files.
 type Board struct {
-	ranks    []Rank
-	files    []File
-	position position
-	width    int // Number of files
-	height   int // Number of ranks
+	ranks  []Rank
+	files  []File
+	cursor position
 
-	// Viewport (height from length of ranks)
-	vpw         int
-	initialized bool
-	fileOffset  int // Index of leftmost visible file (for horizontal scrolling)
+	initialized bool              // set after first SizeMsg
+	vpWidth     int               // viewpoint width (height is header + ranks)
+	offset      int               // leftmost visible file index
+	end         int               // rightmost visible file index (exclusive)
+	layout      []image.Rectangle // rectangles for rank and file layout
 
-	// Layout cache - updated when fileOffset or viewport changes
-	rankAreas []image.Rectangle
-	fileEnd   int // Index (exclusive) of last file to draw
-	fullSpan  int
+	editMode bool // send all keys to focused piece
 
-	// Edit mode - when true, keys go to focused piece instead of nav
-	editMode bool
-
-	// Scroll acceleration
-	repeatDir   string
-	repeatTime  time.Time
-	repeatCount int
+	repeatDir   string    // direction of last move
+	repeatTime  time.Time // time of last move
+	repeatCount int       // step accumulator for accelerted move
 }
 
 // New creates a Board with viewport size.
 func New(ranks []Rank, files []File, rank, file, vpw int) (Board, error) {
+
+	layout, end := computeLayout(files, 0, vpw)
+
 	brd := Board{
 		ranks:       ranks,
 		files:       files,
-		width:       len(files),
-		height:      len(ranks),
-		position:    position{file: file, rank: rank},
-		vpw:         vpw,
+		cursor:      position{file: file, rank: rank},
+		vpWidth:     vpw,
 		initialized: true,
+		layout:      layout,
+		end:         end,
 	}
 
 	err := brd.validate()
@@ -148,7 +143,6 @@ func New(ranks []Rank, files []File, rank, file, vpw int) (Board, error) {
 	}
 
 	brd.setPositions()
-	brd = brd.updateLayout()
 	return brd, nil
 }
 
@@ -161,7 +155,7 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case SizeMsg:
-		brd.vpw = msg.Width
+		brd.vpWidth = msg.Width
 		brd.initialized = true
 		return brd.checkFileOffset(), nil
 
@@ -175,9 +169,9 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MoveToMsg:
 		switch msg.MoveTo {
 		case Top:
-			brd.position.rank = 0
+			brd.cursor.rank = 0
 		case Bottom:
-			brd.position.rank = brd.height - 1
+			brd.cursor.rank = len(brd.ranks) - 1
 		}
 		return brd, brd.positionCmd()
 
@@ -210,12 +204,12 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "pgup":
 			return brd, func() tea.Msg {
-				return NavMsg{Direction: NavUp, Count: brd.height}
+				return NavMsg{Direction: NavUp, Count: len(brd.ranks)}
 			}
 
 		case "pgdown":
 			return brd, func() tea.Msg {
-				return NavMsg{Direction: NavDown, Count: brd.height}
+				return NavMsg{Direction: NavDown, Count: len(brd.ranks)}
 			}
 
 		case "alt+up":
@@ -225,11 +219,11 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return brd.move(NavDown, jumpBy)
 
 		case "g", "alt+pgup":
-			brd.position.rank = 0
+			brd.cursor.rank = 0
 			return brd, tea.Batch(brd.positionCmd(), navCmd(NavTop))
 
 		case "G", "alt+pgdown":
-			brd.position.rank = brd.height - 1
+			brd.cursor.rank = len(brd.ranks) - 1
 			return brd, tea.Batch(brd.positionCmd(), navCmd(NavBottom))
 		}
 	}
@@ -240,8 +234,8 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // updatePiece passes a message to the focused piece
 func (brd Board) updatePiece(msg tea.Msg) (Board, tea.Cmd) {
 
-	r := brd.position.rank
-	f := brd.position.file
+	r := brd.cursor.rank
+	f := brd.cursor.file
 
 	square := brd.ranks[r].squares[f]
 	piece, cmd := square.piece.Update(msg)
@@ -255,9 +249,9 @@ func (brd Board) View() tea.View {
 		return tea.NewView("loading...")
 	}
 
-	canvas := lipgloss.NewCanvas(brd.vpw, headerHeight+len(brd.ranks))
+	canvas := lipgloss.NewCanvas(brd.vpWidth, headerHeight+len(brd.ranks))
 	brd.draw(canvas)
-	brd.drawHighlight(canvas)
+	brd.highlight(canvas)
 
 	return tea.NewView(canvas)
 }
@@ -300,13 +294,11 @@ func (brd *Board) setPositions() {
 
 // replace replaces a board's ranks.
 func (brd Board) replace(ranks []Rank) (board Board, err error) {
-
 	brd.ranks = ranks
-	brd.height = len(ranks)
 
 	// Clamp cursor if new height is smaller
-	if brd.position.rank >= brd.height {
-		brd.position.rank = max(0, brd.height-1)
+	if brd.cursor.rank >= len(brd.ranks) {
+		brd.cursor.rank = max(0, len(brd.ranks)-1)
 	}
 
 	err = brd.validate()
@@ -319,8 +311,7 @@ func (brd Board) replace(ranks []Rank) (board Board, err error) {
 	return
 }
 
-// applyBgToArea sets the background color on all cells in the given area
-func applyBgToArea(canvas *lipgloss.Canvas, x, y, width int, sty lipgloss.Style) {
+func setBackground(canvas *lipgloss.Canvas, x, y, width int, sty lipgloss.Style) {
 
 	bg := sty.GetBackground()
 	for cx := x; cx < x+width; cx++ {
@@ -333,65 +324,73 @@ func applyBgToArea(canvas *lipgloss.Canvas, x, y, width int, sty lipgloss.Style)
 	}
 }
 
-func (brd Board) updateLayout() Board {
-	// Todo: look at naming and comment properly
-	// Clear previous layout
-	brd.rankAreas = brd.rankAreas[:0]
+func computeLayout(files []File, offset, vpWidth int) (layout []image.Rectangle, end int) {
 
-	x := 0
-	for i := brd.fileOffset; i < len(brd.files); i++ {
-		// Stop when viewport is full
-		if x >= brd.vpw {
+	// track horizontal position across the veiwport
+	var x int
+
+	// range thru files from offset until file is off the viewport
+	for i := offset; i < len(files); i++ {
+		if x >= vpWidth {
 			break
 		}
-		// Add column rect at header row (Y=0)
-		w := brd.files[i].Width
-		brd.rankAreas = append(brd.rankAreas, image.Rect(x, 0, x+w, 1))
-		x += w + gutter
-		brd.fileEnd = i + 1
+
+		// add a layout rectangle for this file's width
+		fileWidth := files[i].Width
+		layout = append(layout, image.Rect(x, 0, x+fileWidth, 1))
+
+		// dont foreget gutter when bumping x and track index of last visible
+		x += fileWidth + gutter
+		end = i + 1
 	}
-	brd.fullSpan = x - gutter
-	return brd
+
+	return
 }
 
-func (brd Board) drawHighlight(canvas *lipgloss.Canvas) {
-	selectedY := headerHeight + brd.position.rank
-	visualFile := brd.position.file - brd.fileOffset
-	cellArea := brd.rankAreas[visualFile]
+func (brd Board) contentWidth() int {
+	if len(brd.layout) == 0 {
+		return 0
+	}
+	return brd.layout[len(brd.layout)-1].Max.X
+}
 
-	applyBgToArea(canvas, 0, selectedY, brd.fullSpan, hlRowStyle)
-	applyBgToArea(canvas, cellArea.Min.X, selectedY, cellArea.Dx(), hlCellStyle)
+func (brd Board) highlight(canvas *lipgloss.Canvas) {
+
+	highlightY := headerHeight + brd.cursor.rank
+	setBackground(canvas, 0, highlightY, brd.contentWidth(), hlRowStyle)
+
+	cellArea := brd.layout[brd.cursor.file-brd.offset]
+	setBackground(canvas, cellArea.Min.X, highlightY, cellArea.Dx(), hlCellStyle)
 }
 
 func (brd Board) draw(canvas *lipgloss.Canvas) {
-	areas := newAreasIter(brd.rankAreas)
+	areas := newAreasIter(brd.layout)
 
 	// Headers
 	hdrs := areas.next()
-	for i, file := range brd.files[brd.fileOffset:brd.fileEnd] {
+	for i, file := range brd.files[brd.offset:brd.end] {
 		uv.NewStyledString(file.Name).Draw(canvas, hdrs[i])
 	}
 
 	// Separator
 	areas.next()
-	sepArea := image.Rect(0, areas.offset-1, brd.fullSpan, areas.offset)
-	str := strings.Repeat(separator, brd.fullSpan)
+	sepArea := image.Rect(0, areas.offset-1, brd.contentWidth(), areas.offset)
+	str := strings.Repeat(separator, brd.contentWidth())
 	uv.NewStyledString(tableBorderStyle.Render(str)).Draw(canvas, sepArea)
 
 	// Ranks
 	for _, rank := range brd.ranks {
 		rects := areas.next()
-		for i, square := range rank.squares[brd.fileOffset:brd.fileEnd] {
+		for i, square := range rank.squares[brd.offset:brd.end] {
 			square.piece.View().Content.Draw(canvas, rects[i])
 		}
 	}
 }
 
-// positionCmd returns a command that sends the current cursor position
 func (brd Board) positionCmd() tea.Cmd {
 	pos := SquareMsg{
-		Rank: brd.position.rank,
-		File: brd.position.file,
+		Rank: brd.cursor.rank,
+		File: brd.cursor.file,
 	}
 	return func() tea.Msg { return pos }
 }
@@ -421,27 +420,27 @@ func (brd Board) accelMove(dir string) (Board, tea.Cmd) {
 func (brd Board) move(dir string, n int) (Board, tea.Cmd) {
 	switch dir {
 	case NavUp:
-		if brd.position.rank >= n {
-			brd.position.rank -= n
+		if brd.cursor.rank >= n {
+			brd.cursor.rank -= n
 			return brd, brd.positionCmd()
 		}
 		// Hit top boundary
-		remainder := n - brd.position.rank
-		brd.position.rank = 0
+		remainder := n - brd.cursor.rank
+		brd.cursor.rank = 0
 		return brd, tea.Batch(
 			brd.positionCmd(),
 			func() tea.Msg { return NavMsg{Direction: NavUp, Count: remainder} },
 		)
 
 	case NavDown:
-		maxRank := brd.height - 1
-		if brd.position.rank+n <= maxRank {
-			brd.position.rank += n
+		maxRank := len(brd.ranks) - 1
+		if brd.cursor.rank+n <= maxRank {
+			brd.cursor.rank += n
 			return brd, brd.positionCmd()
 		}
 		// Hit bottom boundary
-		remainder := n - (maxRank - brd.position.rank)
-		brd.position.rank = maxRank
+		remainder := n - (maxRank - brd.cursor.rank)
+		brd.cursor.rank = maxRank
 		return brd, tea.Batch(
 			brd.positionCmd(),
 			func() tea.Msg { return NavMsg{Direction: NavDown, Count: remainder} },
@@ -449,17 +448,17 @@ func (brd Board) move(dir string, n int) (Board, tea.Cmd) {
 
 	// Horizontal movement ignores n for now
 	case NavLeft:
-		if brd.position.file == 0 {
+		if brd.cursor.file == 0 {
 			return brd, nil
 		}
-		brd.position.file--
+		brd.cursor.file--
 		brd = brd.checkFileOffset()
 
 	case NavRight:
-		if brd.position.file == brd.width-1 {
+		if brd.cursor.file == len(brd.files)-1 {
 			return brd, nil
 		}
-		brd.position.file++
+		brd.cursor.file++
 		brd = brd.checkFileOffset()
 	}
 
@@ -468,14 +467,15 @@ func (brd Board) move(dir string, n int) (Board, tea.Cmd) {
 
 func (brd Board) checkFileOffset() Board {
 	switch {
-	case brd.position.file < brd.fileOffset:
-		brd.fileOffset = brd.position.file
-	case brd.position.file >= brd.fileEnd:
-		brd.fileOffset = brd.offsetFor(brd.position.file)
+	case brd.cursor.file < brd.offset:
+		brd.offset = brd.cursor.file
+	case brd.cursor.file >= brd.end:
+		brd.offset = brd.offsetFor(brd.cursor.file)
 	default:
 		return brd
 	}
-	return brd.updateLayout()
+	brd.layout, brd.end = computeLayout(brd.files, brd.offset, brd.vpWidth)
+	return brd
 }
 
 // offsetFor calculates the offset which will lead to a given file being shown at the right edge of board
@@ -483,7 +483,7 @@ func (brd Board) offsetFor(file int) int {
 	var width int
 	for i := file; i >= 0; i-- {
 		width += brd.files[i].Width + gutter
-		if width-gutter > brd.vpw {
+		if width-gutter > brd.vpWidth {
 			return i + 1
 		}
 	}
@@ -492,28 +492,22 @@ func (brd Board) offsetFor(file int) int {
 
 func (brd Board) validate() error {
 
+	// Todo: maybe guard as needed instead?
 	if len(brd.ranks) == 0 || len(brd.files) == 0 {
 		return errors.Errorf("board requires non-zero ranks and files")
 	}
 
-	if len(brd.ranks) != brd.height {
-		return errors.Errorf("ranks length %d does not match height %d", len(brd.ranks), brd.height)
-	}
-	if len(brd.files) != brd.width {
-		return errors.Errorf("files length %d does not match width %d", len(brd.files), brd.width)
-	}
-
 	for i, r := range brd.ranks {
-		if len(r.squares) != brd.width {
-			return errors.Errorf("rank %d length does not equal width", i)
+		if len(r.squares) != len(brd.files) {
+			return errors.Errorf("rank %d has %d squares, expected %d", i, len(r.squares), len(brd.files))
 		}
 	}
 
-	if brd.position.rank < 0 || brd.position.rank >= brd.height {
-		return errors.Errorf("rank %d out of bounds [0, %d)", brd.position.rank, brd.height)
+	if brd.cursor.rank < 0 || brd.cursor.rank >= len(brd.ranks) {
+		return errors.Errorf("rank %d out of bounds [0, %d)", brd.cursor.rank, len(brd.ranks))
 	}
-	if brd.position.file < 0 || brd.position.file >= brd.width {
-		return errors.Errorf("file %d out of bounds [0, %d)", brd.position.file, brd.width)
+	if brd.cursor.file < 0 || brd.cursor.file >= len(brd.files) {
+		return errors.Errorf("file %d out of bounds [0, %d)", brd.cursor.file, len(brd.files))
 	}
 
 	return nil
