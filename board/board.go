@@ -2,6 +2,7 @@ package board
 
 import (
 	"image"
+	"math"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ const (
 
 	accelWindow = 200 * time.Millisecond // reset if no repeat within this window
 	accelMax    = 10                     // max step size
+	accelCurve  = 0.5                    // log ramp shape: lower = more gradual
 )
 
 var (
@@ -46,9 +48,9 @@ type Board struct {
 
 	editMode bool // send all keys to focused piece
 
-	repeatDir   string    // direction of last move
-	repeatTime  time.Time // time of last move
-	repeatCount int       // step accumulator for accelerted move
+	accelDir  string    // direction of acceleration
+	accelAt   time.Time // time of last accelerated move
+	accelStep int       // current step size
 }
 
 // New creates a Board with viewport size.
@@ -297,15 +299,21 @@ func (brd Board) draw(canvas *lipgloss.Canvas) {
 // accelMove moves with acceleration - step size increases with rapid repeats
 func (brd Board) accelMove(dir string) (Board, tea.Cmd) {
 	now := time.Now()
-	if brd.repeatDir == dir && now.Sub(brd.repeatTime) < accelWindow {
-		brd.repeatCount++
+	if brd.accelDir == dir && now.Sub(brd.accelAt) < accelWindow {
+		brd.accelStep++
 	} else {
-		brd.repeatCount = 1
-		brd.repeatDir = dir
+		brd.accelStep = 1
+		brd.accelDir = dir
 	}
-	brd.repeatTime = now
-	step := min(brd.repeatCount, accelMax)
-	return brd.move(dir, step)
+	brd.accelAt = now
+
+	// Logarithmic: slower ramp, smoother feel
+	step := 1 + int(accelCurve*math.Log2(float64(brd.accelStep+1)))
+
+	// Linear: constant ramp
+	// step := brd.accelStep
+
+	return brd.move(dir, min(step, accelMax))
 }
 
 // move moves the cursor by n in the given direction.
