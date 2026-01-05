@@ -2,15 +2,16 @@ package piece
 
 import (
 	tea "charm.land/bubbletea/v2"
-)
 
-// PressedMsg is sent when a button is pressed
-type PressedMsg struct{}
+	"parcours/board"
+)
 
 // Button is a pressable button cell
 type Button struct {
 	label string
 	key   string // Key that triggers the button
+	rank  int
+	file  int
 }
 
 func NewButton(label, key string) Button {
@@ -23,31 +24,21 @@ func NewButton(label, key string) Button {
 func (b Button) Init() tea.Cmd { return nil }
 
 func (b Button) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Todo: dont care about PositionMsg?
-	//       ahh, button is not used
 	switch msg := msg.(type) {
+	case board.PositionMsg:
+		b.rank = msg.Rank
+		b.file = msg.File
+		return b, nil
 	case tea.KeyPressMsg:
 		if msg.String() == b.key {
 			return b, func() tea.Msg {
-				return PressedMsg{}
+				return PressedMsg{Rank: b.rank, File: b.file}
 			}
 		}
 	}
 	return b, nil
 }
 
-func (b Button) Label() string {
-	return b.label
-}
-
 func (b Button) View() tea.View {
 	return tea.NewView(b.label)
-}
-
-func (b Button) Render() string {
-	return b.label
-}
-
-func (b Button) Value() string {
-	return b.label
 }

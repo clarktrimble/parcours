@@ -90,7 +90,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lp.offset = 0
 		return lp, message.GetPageCmd(0, lp.PageSize())
 
-	case board.SquareMsg:
+	case board.PositionMsg:
 		lp.currentRank = msg.Rank
 		lp.currentFile = msg.File
 		return lp, lp.selectedCmd(msg.Rank)

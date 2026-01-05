@@ -56,21 +56,17 @@ func (o Operator) changedCmd() tea.Cmd {
 		return OperatorChangedMsg{
 			Rank:     o.rank,
 			File:     o.file,
-			Selected: o.Selected(),
+			Selected: o.selectedOption(),
 			Index:    o.selected,
 		}
 	}
 }
 
-func (o Operator) Selected() string {
+func (o Operator) selectedOption() string {
 	if o.selected < 0 || o.selected >= len(o.options) {
 		return ""
 	}
 	return o.options[o.selected]
-}
-
-func (o Operator) SelectedIndex() int {
-	return o.selected
 }
 
 func (o Operator) View() tea.View {
@@ -78,15 +74,4 @@ func (o Operator) View() tea.View {
 		return tea.NewView("?")
 	}
 	return tea.NewView(o.options[o.selected])
-}
-
-func (o Operator) Render() string {
-	if o.selected < 0 || o.selected >= len(o.options) {
-		return "?"
-	}
-	return o.options[o.selected]
-}
-
-func (o Operator) Value() string {
-	return o.Selected()
 }

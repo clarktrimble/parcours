@@ -2,14 +2,7 @@ package board
 
 import tea "charm.land/bubbletea/v2"
 
-// SquareMsg contains the board cursor position
-type SquareMsg struct {
-	Rank int // Row position within board (0-indexed)
-	File int // Column position within board (0-indexed)
-}
-
-// PositionMsg tells a piece its position on the board
-// Todo: um dup of SquareMsg, but better named..Thisn is sent to pieces directly with Update call
+// PositionMsg contains a board position (rank and file)
 type PositionMsg struct {
 	Rank int
 	File int
@@ -68,7 +61,7 @@ type RemoveMsg struct {
 // cmd helpers
 
 func (brd Board) positionCmd() tea.Cmd {
-	pos := SquareMsg{
+	pos := PositionMsg{
 		Rank: brd.cursor.rank,
 		File: brd.cursor.file,
 	}

@@ -6,8 +6,17 @@ import "parcours/board"
 var (
 	_ board.PieceMsg = CheckedMsg{}
 	_ board.PieceMsg = OperatorChangedMsg{}
+	_ board.PieceMsg = PressedMsg{}
 	_ board.PieceMsg = ValueChangedMsg{}
 )
+
+// PressedMsg is sent when a button is pressed
+type PressedMsg struct {
+	Rank int
+	File int
+}
+
+func (PressedMsg) IsPieceMsg() {}
 
 // CheckedMsg is sent when a checkbox is toggled
 type CheckedMsg struct {

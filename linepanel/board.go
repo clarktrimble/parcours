@@ -1,11 +1,11 @@
 package linepanel
 
 import (
-	"parcours/board"
-	"parcours/board/piece"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/pkg/errors"
+
+	"parcours/board"
+	"parcours/board/piece"
 )
 
 // buildRankAndFile builds board files and ranks together in one pass
@@ -25,7 +25,7 @@ func (lp LinePanel) buildRankAndFile() (files board.Files, ranks board.Ranks, er
 				err = errors.Errorf("field %s out of range for line %d", field.Name, lineIdx)
 				return
 			}
-			ranks[lineIdx].Append(piece.NewValue(line.Values[i], formatter))
+			ranks[lineIdx].Append(piece.NewLabel(formatter(line.Values[i])))
 		}
 	}
 

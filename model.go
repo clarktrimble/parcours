@@ -109,7 +109,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tablePanel, cmd = m.tablePanel.Update(msg)
 		return m, cmd
 
-	case board.SquareMsg, board.NavMsg:
+	case board.PositionMsg, board.NavMsg:
 		// Route to active panel
 		switch m.active {
 		case tableActive:

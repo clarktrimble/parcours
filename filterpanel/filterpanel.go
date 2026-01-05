@@ -207,7 +207,7 @@ func (pnl FilterPanel) buildBoard() tea.Model {
 	for _, filter := range pnl.filters {
 		rank := board.NewRank([]tea.Model{
 			piece.NewCheckbox(filter.Enabled),
-			piece.NewValue(nt.Value{Raw: filter.Field}, nil),
+			piece.NewLabel(filter.Field),
 			piece.NewOperator(opStrings, opIndex[filter.Op]),
 			piece.NewTextInput(fmt.Sprintf("%v", filter.Value), 50),
 		})

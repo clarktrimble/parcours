@@ -36,27 +36,9 @@ func (c Checkbox) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return c, nil
 }
 
-func (c Checkbox) Checked() bool {
-	return c.checked
-}
-
 func (c Checkbox) View() tea.View {
 	if c.checked {
 		return tea.NewView("[x]")
 	}
 	return tea.NewView("[ ]")
-}
-
-func (c Checkbox) Render() string {
-	if c.checked {
-		return "[x]"
-	}
-	return "[ ]"
-}
-
-func (c Checkbox) Value() string {
-	if c.checked {
-		return "true"
-	}
-	return "false"
 }

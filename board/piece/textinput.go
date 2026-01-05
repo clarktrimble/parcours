@@ -78,18 +78,6 @@ func (t TextInput) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return t, nil
 }
 
-func (t TextInput) Value() string {
-	return t.value
-}
-
-func (t TextInput) Cursor() int {
-	return t.cursor
-}
-
 func (t TextInput) View() tea.View {
 	return tea.NewView(t.value)
-}
-
-func (t TextInput) Render() string {
-	return t.value
 }
