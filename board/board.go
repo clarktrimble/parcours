@@ -17,7 +17,6 @@ const (
 	headerHeight = 2  // header row + separator line
 	jumpBy       = 10 // ranks to scroll with alt+up/down
 
-	// Scroll acceleration
 	accelWindow = 200 * time.Millisecond // reset if no repeat within this window
 	accelMax    = 10                     // max step size
 )
@@ -28,80 +27,10 @@ var (
 	hlCellStyle      = lipgloss.NewStyle().Background(lipgloss.Color("237"))
 )
 
-// Placeholder is a tea.Model that displays while waiting for data
-type Placeholder struct {
-	message string
-}
-
-func NewPlaceholder(message string) Placeholder {
-	return Placeholder{message: message}
-}
-
-func (p Placeholder) Init() tea.Cmd                       { return nil }
-func (p Placeholder) Update(tea.Msg) (tea.Model, tea.Cmd) { return p, nil }
-
-func (p Placeholder) View() tea.View {
-	return tea.NewView(p.message)
-}
-
-// File represents a file down the board.
-// Has ambitions to carry type and/or formatter for its pieces.
-type File struct {
-	Name   string
-	Width  int
-	SrcIdx int // Index into source data
-}
-
-// Files is a slice of File with comparison support.
-type Files []File
-
-// Equal returns true if both slices have the same files.
-func (f Files) Equal(other Files) (equal bool) {
-	if len(f) != len(other) {
-		return
-	}
-	for i := range f {
-		if f[i].Name != other[i].Name || f[i].Width != other[i].Width {
-			return
-		}
-	}
-	equal = true
-	return
-}
-
 // PieceMsg is the interface for messages from interactive pieces.
 type PieceMsg interface {
 	IsPieceMsg()
 }
-
-// Square represents a square of the board.
-type Square struct {
-	piece tea.Model
-}
-
-// Rank represents a rank across the board.
-type Rank struct {
-	squares []Square
-}
-
-// NewRank creates a Rank from a slice of pieces.
-func NewRank(pieces []tea.Model) Rank {
-	squares := make([]Square, len(pieces))
-	for i, piece := range pieces {
-		squares[i] = Square{
-			piece: piece,
-		}
-	}
-	return Rank{squares: squares}
-}
-
-// Append adds a piece to the rank.
-func (r *Rank) Append(piece tea.Model) {
-	r.squares = append(r.squares, Square{piece: piece})
-}
-
-// Ranks is a slice of Rank.
-type Ranks []Rank
 
 // Board represents a grid of squares with ranks and files.
 type Board struct {
@@ -231,19 +160,6 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return brd.updatePiece(msg)
 }
 
-// updatePiece passes a message to the focused piece
-func (brd Board) updatePiece(msg tea.Msg) (Board, tea.Cmd) {
-
-	r := brd.cursor.rank
-	f := brd.cursor.file
-
-	square := brd.ranks[r].squares[f]
-	piece, cmd := square.piece.Update(msg)
-	brd.ranks[r].squares[f].piece = piece
-
-	return brd, cmd
-}
-
 func (brd Board) View() tea.View {
 	if !brd.initialized {
 		return tea.NewView("loading...")
@@ -263,25 +179,6 @@ type position struct {
 	file int
 }
 
-// areasIter yields drawing areas at successive vertical offsets
-type areasIter struct {
-	template []image.Rectangle
-	areas    []image.Rectangle
-	offset   int
-}
-
-func newAreasIter(template []image.Rectangle) *areasIter {
-	return &areasIter{template: template, areas: make([]image.Rectangle, len(template)), offset: 0}
-}
-
-func (ai *areasIter) next() []image.Rectangle {
-	for i, t := range ai.template {
-		ai.areas[i] = image.Rect(t.Min.X, ai.offset, t.Max.X, ai.offset+1)
-	}
-	ai.offset++
-	return ai.areas
-}
-
 func (brd *Board) setPositions() {
 	for r, rank := range brd.ranks {
 		for f := range rank.squares {
@@ -292,23 +189,33 @@ func (brd *Board) setPositions() {
 	}
 }
 
-// replace replaces a board's ranks.
-func (brd Board) replace(ranks []Rank) (board Board, err error) {
+func (brd Board) replace(ranks []Rank) (Board, error) {
 	brd.ranks = ranks
 
-	// Clamp cursor if new height is smaller
+	// clamp cursor if new height is smaller
 	if brd.cursor.rank >= len(brd.ranks) {
 		brd.cursor.rank = max(0, len(brd.ranks)-1)
 	}
 
-	err = brd.validate()
+	err := brd.validate()
 	if err != nil {
-		return
+		return brd, err
 	}
 
 	brd.setPositions()
-	board = brd
-	return
+	return brd, nil
+}
+
+func (brd Board) updatePiece(msg tea.Msg) (Board, tea.Cmd) {
+
+	r := brd.cursor.rank
+	f := brd.cursor.file
+
+	square := brd.ranks[r].squares[f]
+	piece, cmd := square.piece.Update(msg)
+	brd.ranks[r].squares[f].piece = piece
+
+	return brd, cmd
 }
 
 func setBackground(canvas *lipgloss.Canvas, x, y, width int, sty lipgloss.Style) {
@@ -364,12 +271,12 @@ func (brd Board) highlight(canvas *lipgloss.Canvas) {
 }
 
 func (brd Board) draw(canvas *lipgloss.Canvas) {
-	areas := newAreasIter(brd.layout)
+	areas := newRectIter(brd.layout)
 
 	// Headers
 	hdrs := areas.next()
 	for i, file := range brd.files[brd.offset:brd.end] {
-		uv.NewStyledString(file.Name).Draw(canvas, hdrs[i])
+		uv.NewStyledString(file.Header).Draw(canvas, hdrs[i])
 	}
 
 	// Separator
@@ -385,18 +292,6 @@ func (brd Board) draw(canvas *lipgloss.Canvas) {
 			square.piece.View().Content.Draw(canvas, rects[i])
 		}
 	}
-}
-
-func (brd Board) positionCmd() tea.Cmd {
-	pos := SquareMsg{
-		Rank: brd.cursor.rank,
-		File: brd.cursor.file,
-	}
-	return func() tea.Msg { return pos }
-}
-
-func navCmd(dir string) tea.Cmd {
-	return func() tea.Msg { return NavMsg{Direction: dir, Count: 1} }
 }
 
 // accelMove moves with acceleration - step size increases with rapid repeats
@@ -468,17 +363,20 @@ func (brd Board) move(dir string, n int) (Board, tea.Cmd) {
 func (brd Board) checkFileOffset() Board {
 	switch {
 	case brd.cursor.file < brd.offset:
+		// scrolling to the left
 		brd.offset = brd.cursor.file
 	case brd.cursor.file >= brd.end:
+		// scrolling to the right
 		brd.offset = brd.offsetFor(brd.cursor.file)
 	default:
+		// not scrolling view horizontally
 		return brd
 	}
 	brd.layout, brd.end = computeLayout(brd.files, brd.offset, brd.vpWidth)
 	return brd
 }
 
-// offsetFor calculates the offset which will lead to a given file being shown at the right edge of board
+// offsetFor calculates the offset which will show a given file at the right edge of board
 func (brd Board) offsetFor(file int) int {
 	var width int
 	for i := file; i >= 0; i-- {

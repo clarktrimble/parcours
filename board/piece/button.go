@@ -23,6 +23,8 @@ func NewButton(label, key string) Button {
 func (b Button) Init() tea.Cmd { return nil }
 
 func (b Button) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Todo: dont care about PositionMsg?
+	//       ahh, button is not used
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		if msg.String() == b.key {

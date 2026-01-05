@@ -129,6 +129,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case board.PieceMsg:
 		// Route piece messages to active panel
+		// Todo: same as above??
 		switch m.active {
 		case filterActive:
 			m.filterPanel, cmd = m.filterPanel.Update(msg)

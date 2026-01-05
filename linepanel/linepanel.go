@@ -224,7 +224,7 @@ func (lp LinePanel) cellAt(rank, file int) (field string, value nt.Value, err er
 		err = errors.Errorf("SrcIdx out of range: %d", f.SrcIdx)
 		return
 	}
-	field = f.Name
+	field = f.Header
 	value = lp.lines[rank].Values[f.SrcIdx]
 	return
 }

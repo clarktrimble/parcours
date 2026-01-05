@@ -17,7 +17,7 @@ func (lp LinePanel) buildRankAndFile() (files board.Files, ranks board.Ranks, er
 		if !exists || col.Hidden || col.Demote {
 			continue
 		}
-		files = append(files, board.File{Name: field.Name, Width: col.Width, SrcIdx: i})
+		files = append(files, board.File{Header: field.Name, Width: col.Width, SrcIdx: i})
 		formatter := getFormatter(col.Format, col.Width)
 
 		for lineIdx, line := range lp.lines {
@@ -62,4 +62,3 @@ func (lp LinePanel) applyPage() (LinePanel, tea.Cmd) {
 	}
 	return lp, nil
 }
-

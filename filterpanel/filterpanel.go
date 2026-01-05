@@ -66,10 +66,10 @@ var opIndex = map[nt.FilterOp]int{
 }
 
 var filterFiles = []board.File{
-	{Name: "", Width: 3},
-	{Name: "Field", Width: 15},
-	{Name: "Op", Width: 10},
-	{Name: "Value", Width: 30},
+	{Header: "", Width: 3},
+	{Header: "Field", Width: 15},
+	{Header: "Op", Width: 10},
+	{Header: "Value", Width: 30},
 }
 
 func New(ctx context.Context, lgr nt.Logger) FilterPanel {
@@ -132,6 +132,9 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			pnl.filters[msg.Rank].Value = msg.Value
 		}
 		return pnl, nil
+	// end oddity, and yes they are :/
+	// what if we had more than one checkbox -- look at file
+	// so yeah smooth down some, start with x,y over file,rank
 
 	case board.PositionMsg:
 		pnl.selectedFilterIdx = msg.Rank
