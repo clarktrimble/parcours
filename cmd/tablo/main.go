@@ -42,21 +42,7 @@ func main() {
 	}
 	defer dk.Close()
 
-	//logFile := "test/data/smar.log"
-	//logFile := "junk/tag2.log"
-	logFile := "junk/tag-wetrun.log"
-
 	// Todo: dont panic
-
-	err = dk.Load(logFile, 0)
-	if err != nil {
-		panic(err)
-	}
-
-	//err = dk.SetView(parcours.Filter{}, nil)
-	//if err != nil {
-	//panic(err)
-	//}
 
 	model, err := parcours.NewModel(ctx, dk, lgr)
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 	"parcours/detail"
 	nt "parcours/entity"
 	"parcours/filterpanel"
+	"parcours/intake"
 	"parcours/linepanel"
 	"parcours/message"
 	"parcours/style"
@@ -26,7 +27,8 @@ const (
 type active int
 
 const (
-	tableActive active = iota
+	intakeActive active = iota
+	tableActive
 	detailActive
 	filterActive
 )
@@ -38,6 +40,7 @@ type Model struct {
 	ctx         context.Context
 	errorString string
 
+	intakePanel tea.Model
 	tablePanel  tea.Model
 	detailPanel tea.Model
 	filterPanel tea.Model
@@ -52,45 +55,62 @@ type Model struct {
 	selectedId  string
 }
 
-// NewModel creates a new bt model.
+// NewModel creates a new bt model starting with the intake panel.
 func NewModel(ctx context.Context, store Store, lgr nt.Logger) (model Model, err error) {
 
-	layout, err := loadLayout("layout.yaml")
+	intakePanel, err := intake.New(ctx, lgr)
 	if err != nil {
 		return
 	}
-
-	// Promote fields from layout
-	err = layout.promote(store)
-	if err != nil {
-		return
-	}
-
-	// Apply filter from layout (SetView handles nil)
-	err = store.SetView(layout.Filter, nil)
-	if err != nil {
-		return
-	}
-
-	// Get fields from store
-	fields, count, err := store.GetView()
-	if err != nil {
-		return
-	}
-
-	linesPanel := linepanel.New(ctx, layout.Columns, fields, count, lgr)
 
 	model = Model{
 		Store:       store,
 		ctx:         ctx,
 		logger:      lgr,
-		tablePanel:  linesPanel,
-		detailPanel: detail.NewDetailPanel(ctx, layout.Columns, lgr),
+		intakePanel: intakePanel,
+		tablePanel:  board.NewPlaceholder("No file loaded"),
+		detailPanel: board.NewPlaceholder("No file loaded"),
 		filterPanel: filterpanel.New(ctx, lgr),
-		active:      tableActive,
+		active:      intakeActive,
 	}
 
 	return
+}
+
+// loadFile loads a file and initializes the data panels.
+func (m *Model) loadFile(path string) error {
+	err := m.Store.Load(path, 0)
+	if err != nil {
+		return err
+	}
+
+	layout, err := loadLayout(layoutFile)
+	if err != nil {
+		return err
+	}
+
+	// Promote fields from layout
+	err = layout.promote(m.Store)
+	if err != nil {
+		return err
+	}
+
+	// Apply filter from layout (SetView handles nil)
+	err = m.Store.SetView(layout.Filter, nil)
+	if err != nil {
+		return err
+	}
+
+	// Get fields from store
+	fields, count, err := m.Store.GetView()
+	if err != nil {
+		return err
+	}
+
+	m.tablePanel = linepanel.New(m.ctx, layout.Columns, fields, count, m.logger)
+	m.detailPanel = detail.NewDetailPanel(m.ctx, layout.Columns, m.logger)
+
+	return nil
 }
 
 func (m Model) Init() tea.Cmd {
@@ -109,9 +129,32 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tablePanel, cmd = m.tablePanel.Update(msg)
 		return m, cmd
 
+	case intake.FileSelectedMsg:
+		// Load the selected file and switch to table view
+		err := m.loadFile(msg.Path)
+		if err != nil {
+			m.errorString = err.Error()
+			return m, nil
+		}
+		m.active = tableActive
+		// Send size to newly created panels - must return cmd from tablePanel
+		// as it triggers the initial data fetch
+		panelHeight := m.Height - footerHeight
+		m.tablePanel, cmd = m.tablePanel.Update(linepanel.SizeMsg{
+			Width:  m.Width,
+			Height: panelHeight,
+		})
+		m.detailPanel, _ = m.detailPanel.Update(detail.SizeMsg{
+			Width:  m.Width,
+			Height: panelHeight,
+		})
+		return m, cmd
+
 	case board.PositionMsg, board.NavMsg:
 		// Route to active panel
 		switch m.active {
+		case intakeActive:
+			m.intakePanel, cmd = m.intakePanel.Update(msg)
 		case tableActive:
 			m.tablePanel, cmd = m.tablePanel.Update(msg)
 		case detailActive:
@@ -185,17 +228,37 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 
 		case "esc":
-			if m.active != tableActive {
+			switch m.active {
+			case intakeActive:
+				// Only quit from intake if a file is loaded
+				if m.Store.Name() != "" {
+					m.active = tableActive
+					return m, nil
+				}
+				return m, tea.Quit
+			case tableActive:
+				return m, tea.Quit
+			default:
 				m.active = tableActive
 				return m, nil
 			}
-			return m, tea.Quit
+
+		case "o":
+			// Open intake panel
+			if m.active != intakeActive {
+				m.active = intakeActive
+				return m, nil
+			}
 
 		case "r":
-			return m, m.reloadColumns()
+			if m.active == tableActive {
+				return m, m.reloadColumns()
+			}
 
 		case "f":
-			return m, m.reloadFilter()
+			if m.active == tableActive {
+				return m, m.reloadFilter()
+			}
 
 		case "enter":
 			if m.active == tableActive {
@@ -206,6 +269,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		default:
 			switch m.active {
+			case intakeActive:
+				m.intakePanel, cmd = m.intakePanel.Update(msg)
 			case tableActive:
 				m.tablePanel, cmd = m.tablePanel.Update(msg)
 			case detailActive:
@@ -226,6 +291,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		panelHeight := msg.Height - footerHeight
 
 		var cmds []tea.Cmd
+		m.intakePanel, cmd = m.intakePanel.Update(intake.SizeMsg{
+			Width:  msg.Width,
+			Height: panelHeight,
+		})
+		cmds = append(cmds, cmd)
+
 		m.tablePanel, cmd = m.tablePanel.Update(linepanel.SizeMsg{
 			Width:  msg.Width,
 			Height: panelHeight,
@@ -258,6 +329,8 @@ func (m Model) View() tea.View {
 
 	var activeView tea.View
 	switch m.active {
+	case intakeActive:
+		activeView = m.intakePanel.View()
 	case tableActive:
 		activeView = m.tablePanel.View()
 	case detailActive:
