@@ -29,11 +29,6 @@ var (
 	hlCellStyle      = lipgloss.NewStyle().Background(lipgloss.Color("237"))
 )
 
-// PieceMsg is the interface for messages from interactive pieces.
-type PieceMsg interface {
-	IsPieceMsg()
-}
-
 // Board represents a grid of squares with ranks and files.
 type Board struct {
 	ranks  []Rank
@@ -85,7 +80,7 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 
-	case SizeMsg:
+	case tea.WindowSizeMsg:
 		brd.vpWidth = msg.Width
 		brd.initialized = true
 		return brd.checkFileOffset(), nil

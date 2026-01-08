@@ -18,6 +18,8 @@ import (
 // Todo: look over filter -> ducksql,
 // Todo: bug "board requires non-zero ranks and files" when  filtering to 0 lines
 // Todo: rethink key-binds holistically
+// Todo: look for ignored cmd's thruout
+// Todo: disable accel for non-lp
 
 // Store specifies a backing datastore.
 // Todo: rename Get/Set View

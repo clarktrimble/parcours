@@ -37,12 +37,6 @@ type MoveToMsg struct {
 	MoveTo MoveTo
 }
 
-// SizeMsg tells the board its display size
-type SizeMsg struct {
-	Width  int
-	Height int
-}
-
 // ReplaceMsg signals the board should replace its ranks
 type ReplaceMsg struct {
 	Ranks []Rank

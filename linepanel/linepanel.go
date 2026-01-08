@@ -57,17 +57,17 @@ func New(ctx context.Context, columns []nt.Column, fields []nt.Field, count int,
 }
 
 func (lp LinePanel) Init() tea.Cmd {
-	return lp.board.Init()
+	return Wrap(lp.board.Init())
 }
 
 func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
-	case SizeMsg:
+	case tea.WindowSizeMsg:
 		lp.width = msg.Width
 		lp.height = msg.Height
 		// Forward size to board
-		lp.board, _ = lp.board.Update(board.SizeMsg{Width: msg.Width, Height: msg.Height})
+		lp.board, _ = lp.board.Update(msg)
 		// Request initial page of data (board will be built when PageMsg arrives)
 		return lp, message.GetPageCmd(lp.offset, lp.PageSize())
 
@@ -75,7 +75,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lp.lines = msg.Lines
 		lp.total = msg.Count
 		lp, cmd := lp.applyPage()
-		return lp, tea.Batch(cmd, func() tea.Msg {
+		return lp, tea.Batch(Wrap(cmd), func() tea.Msg {
 			return message.CountMsg{Count: msg.Count}
 		})
 
@@ -111,7 +111,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Can't scroll further, move cursor to bottom
 			var cmd tea.Cmd
 			lp.board, cmd = lp.board.Update(board.MoveToMsg{MoveTo: board.Bottom})
-			return lp, cmd
+			return lp, Wrap(cmd)
 		case board.NavUp:
 			// Scroll up by msg.Ranks
 			if lp.offset > 0 {
@@ -124,7 +124,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Can't scroll further, move cursor to top
 			var cmd tea.Cmd
 			lp.board, cmd = lp.board.Update(board.MoveToMsg{MoveTo: board.Top})
-			return lp, cmd
+			return lp, Wrap(cmd)
 		case board.NavTop:
 			// Jump to first page
 			if lp.offset != 0 {
@@ -149,13 +149,13 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Pass other keys to board
 		var cmd tea.Cmd
 		lp.board, cmd = lp.board.Update(msg)
-		return lp, cmd
+		return lp, Wrap(cmd)
 
 	default:
 		// Pass everything else to board
 		var cmd tea.Cmd
 		lp.board, cmd = lp.board.Update(msg)
-		return lp, cmd
+		return lp, Wrap(cmd)
 	}
 }
 

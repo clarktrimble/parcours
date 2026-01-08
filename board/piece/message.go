@@ -1,33 +1,19 @@
 package piece
 
-import "parcours/board"
-
-// Ensure messages implement board.PieceMsg
-var (
-	_ board.PieceMsg = CheckedMsg{}
-	_ board.PieceMsg = OperatorChangedMsg{}
-	_ board.PieceMsg = PressedMsg{}
-	_ board.PieceMsg = ValueChangedMsg{}
-)
-
-// PressedMsg is sent when a button is pressed
+// PressedMsg is sent when a button is pressed.
 type PressedMsg struct {
 	Rank int
 	File int
 }
 
-func (PressedMsg) IsPieceMsg() {}
-
-// CheckedMsg is sent when a checkbox is toggled
+// CheckedMsg is sent when a checkbox is toggled.
 type CheckedMsg struct {
 	Rank    int
 	File    int
 	Checked bool
 }
 
-func (CheckedMsg) IsPieceMsg() {}
-
-// OperatorChangedMsg is sent when an operator selection changes
+// OperatorChangedMsg is sent when an operator selection changes.
 type OperatorChangedMsg struct {
 	Rank     int
 	File     int
@@ -35,13 +21,9 @@ type OperatorChangedMsg struct {
 	Index    int
 }
 
-func (OperatorChangedMsg) IsPieceMsg() {}
-
-// ValueChangedMsg is sent when a text input value changes
+// ValueChangedMsg is sent when a text input value changes.
 type ValueChangedMsg struct {
 	Rank  int
 	File  int
 	Value string
 }
-
-func (ValueChangedMsg) IsPieceMsg() {}

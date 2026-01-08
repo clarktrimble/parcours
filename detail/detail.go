@@ -53,7 +53,7 @@ func (pnl DetailPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		pnl.computeContentLines()
 		pnl.scrollOffset = 0
 
-	case SizeMsg:
+	case tea.WindowSizeMsg:
 		pnl.width = msg.Width
 		pnl.height = msg.Height
 		pnl.scrollOffset = 0

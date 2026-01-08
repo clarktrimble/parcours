@@ -28,7 +28,7 @@ type active int
 
 const (
 	intakeActive active = iota
-	tableActive
+	lineActive
 	detailActive
 	filterActive
 )
@@ -41,7 +41,7 @@ type Model struct {
 	errorString string
 
 	intakePanel tea.Model
-	tablePanel  tea.Model
+	linePanel   tea.Model
 	detailPanel tea.Model
 	filterPanel tea.Model
 	active      active
@@ -68,7 +68,7 @@ func NewModel(ctx context.Context, store Store, lgr nt.Logger) (model Model, err
 		ctx:         ctx,
 		logger:      lgr,
 		intakePanel: intakePanel,
-		tablePanel:  board.NewPlaceholder("No file loaded"),
+		linePanel:   board.NewPlaceholder("No file loaded"),
 		detailPanel: board.NewPlaceholder("No file loaded"),
 		filterPanel: filterpanel.New(ctx, lgr),
 		active:      intakeActive,
@@ -107,7 +107,7 @@ func (m *Model) loadFile(path string) error {
 		return err
 	}
 
-	m.tablePanel = linepanel.New(m.ctx, layout.Columns, fields, count, m.logger)
+	m.linePanel = linepanel.New(m.ctx, layout.Columns, fields, count, m.logger)
 	m.detailPanel = detail.NewDetailPanel(m.ctx, layout.Columns, m.logger)
 
 	return nil
@@ -125,8 +125,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 
-	case linepanel.LinesMsg:
-		m.tablePanel, cmd = m.tablePanel.Update(msg)
+	case linepanel.PageMsg, linepanel.ColumnsMsg, linepanel.ResetMsg:
+		m.linePanel, cmd = m.linePanel.Update(msg)
 		return m, cmd
 
 	case intake.FileSelectedMsg:
@@ -136,49 +136,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.errorString = err.Error()
 			return m, nil
 		}
-		m.active = tableActive
+		m.active = lineActive
 		// Send size to newly created panels - must return cmd from tablePanel
 		// as it triggers the initial data fetch
-		panelHeight := m.Height - footerHeight
-		m.tablePanel, cmd = m.tablePanel.Update(linepanel.SizeMsg{
-			Width:  m.Width,
-			Height: panelHeight,
-		})
-		m.detailPanel, _ = m.detailPanel.Update(detail.SizeMsg{
-			Width:  m.Width,
-			Height: panelHeight,
-		})
+		panelSize := tea.WindowSizeMsg{Width: m.Width, Height: m.Height - footerHeight}
+		m.linePanel, cmd = m.linePanel.Update(panelSize)
+		m.detailPanel, _ = m.detailPanel.Update(panelSize)
 		return m, cmd
 
-	case board.PositionMsg, board.NavMsg:
-		// Route to active panel
-		switch m.active {
-		case intakeActive:
-			m.intakePanel, cmd = m.intakePanel.Update(msg)
-		case tableActive:
-			m.tablePanel, cmd = m.tablePanel.Update(msg)
-		case detailActive:
-			m.detailPanel, cmd = m.detailPanel.Update(msg)
-		}
+	case intake.Msg:
+		m.intakePanel, cmd = m.intakePanel.Update(msg.Wrapped)
 		return m, cmd
 
-	case detail.DetailMsg:
+	case linepanel.Msg:
+		m.linePanel, cmd = m.linePanel.Update(msg.Wrapped)
+		return m, cmd
+
+	case detail.LineMsg, detail.ColumnsMsg:
 		m.detailPanel, cmd = m.detailPanel.Update(msg)
 		return m, cmd
 
-	case filterpanel.FilterMsg:
-		m.filterPanel, cmd = m.filterPanel.Update(msg)
-		return m, cmd
-
-	case board.PieceMsg:
-		// Route piece messages to active panel
-		// Todo: same as above??
-		switch m.active {
-		case filterActive:
-			m.filterPanel, cmd = m.filterPanel.Update(msg)
-		case tableActive:
-			m.tablePanel, cmd = m.tablePanel.Update(msg)
-		}
+	case filterpanel.Msg:
+		m.filterPanel, cmd = m.filterPanel.Update(msg.Wrapped)
 		return m, cmd
 
 	case message.SetFilterMsg:
@@ -186,11 +165,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		err := m.Store.SetView(msg.Filter, nil)
 		if err != nil {
 			m.errorString = err.Error()
-			m.active = tableActive
+			m.active = lineActive
 			return m, nil
 		}
 		// Switch back to table and reset to reload with new filter
-		m.active = tableActive
+		m.active = lineActive
 		return m, func() tea.Msg { return linepanel.ResetMsg{} }
 
 	case message.OpenFilterMsg:
@@ -232,14 +211,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case intakeActive:
 				// Only quit from intake if a file is loaded
 				if m.Store.Name() != "" {
-					m.active = tableActive
+					m.active = lineActive
 					return m, nil
 				}
 				return m, tea.Quit
-			case tableActive:
+			case lineActive:
 				return m, tea.Quit
 			default:
-				m.active = tableActive
+				m.active = lineActive
 				return m, nil
 			}
 
@@ -251,17 +230,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 		case "r":
-			if m.active == tableActive {
+			if m.active == lineActive {
 				return m, m.reloadColumns()
 			}
 
 		case "f":
-			if m.active == tableActive {
+			if m.active == lineActive {
 				return m, m.reloadFilter()
 			}
 
 		case "enter":
-			if m.active == tableActive {
+			if m.active == lineActive {
 				m.active = detailActive
 				return m, m.getLine(m.selectedId)
 			}
@@ -271,8 +250,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.active {
 			case intakeActive:
 				m.intakePanel, cmd = m.intakePanel.Update(msg)
-			case tableActive:
-				m.tablePanel, cmd = m.tablePanel.Update(msg)
+			case lineActive:
+				m.linePanel, cmd = m.linePanel.Update(msg)
 			case detailActive:
 				m.detailPanel, cmd = m.detailPanel.Update(msg)
 			case filterActive:
@@ -288,32 +267,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.initialized = true
 		}
 
-		panelHeight := msg.Height - footerHeight
+		panelSize := tea.WindowSizeMsg{Width: msg.Width, Height: msg.Height - footerHeight}
 
 		var cmds []tea.Cmd
-		m.intakePanel, cmd = m.intakePanel.Update(intake.SizeMsg{
-			Width:  msg.Width,
-			Height: panelHeight,
-		})
+		m.intakePanel, cmd = m.intakePanel.Update(panelSize)
 		cmds = append(cmds, cmd)
 
-		m.tablePanel, cmd = m.tablePanel.Update(linepanel.SizeMsg{
-			Width:  msg.Width,
-			Height: panelHeight,
-		})
+		m.linePanel, cmd = m.linePanel.Update(panelSize)
 		cmds = append(cmds, cmd)
 
-		m.detailPanel, cmd = m.detailPanel.Update(detail.SizeMsg{
-			Width:  msg.Width,
-			Height: panelHeight,
-		})
+		m.detailPanel, cmd = m.detailPanel.Update(panelSize)
 		cmds = append(cmds, cmd)
 
-		// Todo: use filter size, or lose
-		m.filterPanel, cmd = m.filterPanel.Update(filterpanel.SizeMsg{
-			Width:  msg.Width,
-			Height: panelHeight,
-		})
+		m.filterPanel, cmd = m.filterPanel.Update(panelSize)
 		cmds = append(cmds, cmd)
 
 		return m, tea.Batch(cmds...)
@@ -331,13 +297,13 @@ func (m Model) View() tea.View {
 	switch m.active {
 	case intakeActive:
 		activeView = m.intakePanel.View()
-	case tableActive:
-		activeView = m.tablePanel.View()
+	case lineActive:
+		activeView = m.linePanel.View()
 	case detailActive:
 		activeView = m.detailPanel.View()
 	case filterActive:
 		// Show filter dialog over table
-		activeView = m.tablePanel.View()
+		activeView = m.linePanel.View()
 	}
 
 	// Create footer content and layer positioned at bottom

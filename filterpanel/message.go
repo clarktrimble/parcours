@@ -1,12 +1,24 @@
 package filterpanel
 
-type FilterMsg interface {
-	isFilterMsg()
+import tea "charm.land/bubbletea/v2"
+
+// Msg is a msg that can be routed as filterpanel.Msg.
+type Msg struct {
+	Wrapped tea.Msg
 }
 
-func (SizeMsg) isFilterMsg() {}
+// Wrap wraps a cmd.
+func Wrap(cmd tea.Cmd) tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
 
-type SizeMsg struct {
-	Width  int
-	Height int
+	return func() tea.Msg {
+		msg := cmd()
+		if msg == nil {
+			return nil
+		}
+
+		return Msg{Wrapped: msg}
+	}
 }

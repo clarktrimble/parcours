@@ -34,6 +34,7 @@ type IntakePanel struct {
 
 // Todo: consider filtering to common log file extensions (.log, .json, .ndjson)
 // Todo: remember current path across useages, maybe by stashing elsewhere via msg
+// Todo: remember last opened file and try to reopen, sometimes?
 // Todo: remember previously viewed files in this session, longer?
 // Todo: multi-file, woah -- mind blown
 // Todo: consider sorting options (name, date, size, dirs first)
@@ -75,11 +76,11 @@ func (pnl IntakePanel) Init() tea.Cmd {
 func (pnl IntakePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
-	case SizeMsg:
+	case tea.WindowSizeMsg:
 		pnl.width = msg.Width
 		pnl.height = msg.Height
 		pnl.board = pnl.buildBoard()
-		pnl.board, _ = pnl.board.Update(board.SizeMsg{Width: msg.Width, Height: msg.Height})
+		pnl.board, _ = pnl.board.Update(msg)
 		return pnl, nil
 
 	case board.PositionMsg:
@@ -94,7 +95,7 @@ func (pnl IntakePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	pnl.board, cmd = pnl.board.Update(msg)
-	return pnl, cmd
+	return pnl, Wrap(cmd)
 }
 
 func (pnl IntakePanel) View() tea.View {

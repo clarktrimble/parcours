@@ -104,14 +104,12 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		pnl.board = pnl.buildBoard()
 		return pnl, nil
 
-	case SizeMsg:
+	case tea.WindowSizeMsg:
 		pnl.width = msg.Width
 		pnl.height = msg.Height
-		pnl.board, _ = pnl.board.Update(board.SizeMsg{Width: msg.Width, Height: msg.Height})
+		pnl.board, _ = pnl.board.Update(msg)
 		return pnl, nil
 
-	// Todo: these are an oddity??
-	//       more to do with widgets than pieces
 	case piece.CheckedMsg:
 		if msg.Rank >= 0 && msg.Rank < len(pnl.filters) {
 			pnl.filters[msg.Rank].Enabled = msg.Checked
@@ -132,8 +130,7 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			pnl.filters[msg.Rank].Value = msg.Value
 		}
 		return pnl, nil
-	// end oddity, and yes they are :/
-	// what if we had more than one checkbox -- look at file
+	// Todo: what if we had more than one checkbox -- look at file
 	// so yeah smooth down some, start with x,y over file,rank
 
 	case board.PositionMsg:
@@ -161,7 +158,7 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Pass to board
 			var cmd tea.Cmd
 			pnl.board, cmd = pnl.board.Update(msg)
-			return pnl, cmd
+			return pnl, Wrap(cmd)
 		}
 	}
 

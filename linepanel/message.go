@@ -1,39 +1,41 @@
 package linepanel
 
 import (
+	tea "charm.land/bubbletea/v2"
+
 	nt "parcours/entity"
 )
 
-// LinesMsg is a marker interface for messages destined for LinesPanel
-type LinesMsg interface {
-	linesMsg()
+// Msg is a msg that can be routed as linepanel.Msg.
+type Msg struct {
+	Wrapped tea.Msg
 }
 
-// SizeMsg tells the panel its display size
-type SizeMsg struct {
-	Width  int
-	Height int
+// Wrap wraps a cmd.
+func Wrap(cmd tea.Cmd) tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		msg := cmd()
+		if msg == nil {
+			return nil
+		}
+		return Msg{Wrapped: msg}
+	}
 }
 
-func (SizeMsg) linesMsg() {}
-
-// PageMsg delivers a page of line data
+// PageMsg delivers a page of line data.
 type PageMsg struct {
 	Lines []nt.Line
 	Count int // Total count after filtering
 }
 
-func (PageMsg) linesMsg() {}
-
-// ColumnsMsg updates the column configuration
+// ColumnsMsg updates the column configuration.
 type ColumnsMsg struct {
 	Columns []nt.Column
 	Fields  []nt.Field
 }
 
-func (ColumnsMsg) linesMsg() {}
-
-// ResetMsg resets the panel to initial state
+// ResetMsg resets the panel to initial state.
 type ResetMsg struct{}
-
-func (ResetMsg) linesMsg() {}
