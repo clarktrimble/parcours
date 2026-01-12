@@ -11,3 +11,11 @@ type LineMsg struct {
 type ColumnsMsg struct {
 	Columns []nt.Column
 }
+
+// DismissedMsg signals the detail panel wants to close.
+type DismissedMsg struct{}
+
+// OpenDetailMsg requests opening detail view for a line.
+type OpenDetailMsg struct {
+	Id string
+}

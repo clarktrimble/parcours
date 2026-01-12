@@ -49,6 +49,8 @@ var intakeFiles = []board.File{
 }
 
 func New(ctx context.Context, lgr nt.Logger) (IntakePanel, error) {
+
+	// Todo: pass cwd in
 	cwd, err := os.Getwd()
 	if err != nil {
 		return IntakePanel{}, err
@@ -88,7 +90,10 @@ func (pnl IntakePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return pnl, nil
 
 	case tea.KeyPressMsg:
-		if msg.String() == "enter" {
+		switch msg.String() {
+		case "esc":
+			return pnl, func() tea.Msg { return DismissedMsg{} }
+		case "enter":
 			return pnl.handleEnter()
 		}
 	}

@@ -34,6 +34,9 @@ type OpenFilterMsg struct {
 }
 
 // SetFilterMsg signals to apply a filter to the data
+// Todo: unify Filter and Filters - currently Filter is combined for Store,
+// Filters is full list for UI state
 type SetFilterMsg struct {
-	Filter nt.Filter
+	Filter  nt.Filter   // combined filter for Store
+	Filters []nt.Filter // full list for saving
 }

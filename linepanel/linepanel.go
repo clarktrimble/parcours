@@ -143,8 +143,13 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return lp, nil
 
 	case tea.KeyPressMsg:
-		if msg.String() == "c" {
+		switch msg.String() {
+		case "esc":
+			return lp, func() tea.Msg { return DismissedMsg{} }
+		case "c":
 			return lp, lp.filterCmd()
+		case "enter":
+			return lp, lp.openDetailCmd()
 		}
 		// Pass other keys to board
 		var cmd tea.Cmd
@@ -206,6 +211,18 @@ func (lp LinePanel) filterCmd() tea.Cmd {
 			Field: field,
 			Value: value,
 		}
+	}
+}
+
+// openDetailCmd returns a command to open detail view for the selected line
+func (lp LinePanel) openDetailCmd() tea.Cmd {
+	if lp.currentRank < 0 || lp.currentRank >= len(lp.lines) {
+		return nil
+	}
+	id := lp.lines[lp.currentRank].Id
+	cols := lp.columns
+	return func() tea.Msg {
+		return OpenDetailMsg{Id: id, Columns: cols}
 	}
 }
 

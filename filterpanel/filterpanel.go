@@ -72,11 +72,12 @@ var filterFiles = []board.File{
 	{Header: "Value", Width: 30},
 }
 
-func New(ctx context.Context, lgr nt.Logger) FilterPanel {
+func New(ctx context.Context, lgr nt.Logger, filters []nt.Filter) FilterPanel {
 	return FilterPanel{
-		ctx:    ctx,
-		logger: lgr,
-		board:  board.Placeholder{},
+		ctx:             ctx,
+		logger:          lgr,
+		board:           board.Placeholder{},
+		filtersSnapshot: filters,
 	}
 }
 
@@ -139,6 +140,8 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
+		case "esc":
+			return pnl, func() tea.Msg { return CanceledMsg{} }
 		case "p":
 			// Commit working state to snapshot and apply
 			pnl.filtersSnapshot = pnl.filters
@@ -191,7 +194,7 @@ func (pnl FilterPanel) applyCmd() tea.Cmd {
 	}
 
 	return func() tea.Msg {
-		return message.SetFilterMsg{Filter: filterToApply}
+		return message.SetFilterMsg{Filter: filterToApply, Filters: pnl.filters}
 	}
 }
 

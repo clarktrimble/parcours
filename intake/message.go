@@ -7,9 +7,17 @@ type FileSelectedMsg struct {
 	Path string
 }
 
+// DismissedMsg signals intake wants to close (esc pressed).
+type DismissedMsg struct{}
+
 // Msg is a msg that can be routed as intake.Msg.
 type Msg struct {
 	Wrapped tea.Msg
+}
+
+// Unwrap returns the wrapped message (implements Unwrapper)
+func (m Msg) Unwrap() tea.Msg {
+	return m.Wrapped
 }
 
 // Wrap wraps a cmd.

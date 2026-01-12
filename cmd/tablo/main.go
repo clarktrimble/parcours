@@ -44,7 +44,7 @@ func main() {
 
 	// Todo: dont panic
 
-	model, err := parcours.NewModel(ctx, dk, lgr)
+	model, err := parcours.NewModelToo(ctx, dk, lgr)
 	if err != nil {
 		panic(err)
 	}

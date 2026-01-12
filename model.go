@@ -70,7 +70,7 @@ func NewModel(ctx context.Context, store Store, lgr nt.Logger) (model Model, err
 		intakePanel: intakePanel,
 		linePanel:   board.NewPlaceholder("No file loaded"),
 		detailPanel: board.NewPlaceholder("No file loaded"),
-		filterPanel: filterpanel.New(ctx, lgr),
+		filterPanel: filterpanel.New(ctx, lgr, nil),
 		active:      intakeActive,
 	}
 

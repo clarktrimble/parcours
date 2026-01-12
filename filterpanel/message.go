@@ -7,6 +7,14 @@ type Msg struct {
 	Wrapped tea.Msg
 }
 
+// Unwrap returns the wrapped message (implements Unwrapper)
+func (m Msg) Unwrap() tea.Msg {
+	return m.Wrapped
+}
+
+// CanceledMsg signals the filter panel was dismissed without applying.
+type CanceledMsg struct{}
+
 // Wrap wraps a cmd.
 func Wrap(cmd tea.Cmd) tea.Cmd {
 	if cmd == nil {
