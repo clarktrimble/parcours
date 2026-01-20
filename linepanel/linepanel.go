@@ -145,9 +145,15 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "esc":
-			return lp, func() tea.Msg { return DismissedMsg{} }
+			return lp, func() tea.Msg { return CloseMsg{} }
 		case "c":
 			return lp, lp.filterCmd()
+		case "f":
+			return lp, func() tea.Msg { return OpenFilterMsg{} }
+		case "r":
+			return lp, func() tea.Msg { return ReloadColumnsMsg{} }
+		case "o":
+			return lp, func() tea.Msg { return OpenIntakeMsg{} }
 		case "enter":
 			return lp, lp.openDetailCmd()
 		}
@@ -207,7 +213,7 @@ func (lp LinePanel) filterCmd() tea.Cmd {
 		return func() tea.Msg { return err }
 	}
 	return func() tea.Msg {
-		return message.OpenFilterMsg{
+		return OpenFilterMsg{
 			Field: field,
 			Value: value,
 		}

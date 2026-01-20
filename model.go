@@ -172,7 +172,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.active = lineActive
 		return m, func() tea.Msg { return linepanel.ResetMsg{} }
 
-	case message.OpenFilterMsg:
+	case linepanel.OpenFilterMsg:
 		// Open filter dialog with cell data
 		m.active = filterActive
 		m.filterPanel, cmd = m.filterPanel.Update(msg)

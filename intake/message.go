@@ -1,37 +1,32 @@
 package intake
 
-import tea "charm.land/bubbletea/v2"
+import (
+	tea "charm.land/bubbletea/v2"
+
+	"parcours/message"
+)
 
 // FileSelectedMsg signals that a file was selected for loading
 type FileSelectedMsg struct {
 	Path string
 }
 
-// DismissedMsg signals intake wants to close (esc pressed).
-type DismissedMsg struct{}
+// CloseMsg signals intake wants to close (esc pressed).
+type CloseMsg struct{}
 
-// Msg is a msg that can be routed as intake.Msg.
+// Msg wraps a msg as originating from intake.
 type Msg struct {
 	Wrapped tea.Msg
 }
 
-// Unwrap returns the wrapped message (implements Unwrapper)
-func (m Msg) Unwrap() tea.Msg {
-	return m.Wrapped
+// Unwrap unwraps the wrapped msg.
+func (msg Msg) Unwrap() tea.Msg {
+	return msg.Wrapped
 }
 
-// Wrap wraps a cmd.
+// Wrap produces a cmd that will wrap its msg.
 func Wrap(cmd tea.Cmd) tea.Cmd {
-	if cmd == nil {
-		return nil
-	}
-
-	return func() tea.Msg {
-		msg := cmd()
-		if msg == nil {
-			return nil
-		}
-
+	return message.WrapCmd(cmd, func(msg tea.Msg) tea.Msg {
 		return Msg{Wrapped: msg}
-	}
+	})
 }

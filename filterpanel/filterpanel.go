@@ -9,6 +9,7 @@ import (
 	"parcours/board"
 	"parcours/board/piece"
 	nt "parcours/entity"
+	"parcours/linepanel"
 	"parcours/message"
 )
 
@@ -88,19 +89,21 @@ func (pnl FilterPanel) Init() tea.Cmd {
 func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
-	case message.OpenFilterMsg:
+	case linepanel.OpenFilterMsg:
 		// Start from committed state
 		pnl.filters = make([]nt.Filter, len(pnl.filtersSnapshot))
 		copy(pnl.filters, pnl.filtersSnapshot)
 
-		newFilter := nt.Filter{
-			Op:      nt.Ne,
-			Field:   msg.Field,
-			Value:   msg.Value,
-			Enabled: true,
+		// If Field is set, add a new filter; otherwise just view existing
+		if msg.Field != "" {
+			newFilter := nt.Filter{
+				Op:      nt.Ne,
+				Field:   msg.Field,
+				Value:   msg.Value,
+				Enabled: true,
+			}
+			pnl.filters, pnl.selectedFilterIdx = pnl.placeFilter(newFilter)
 		}
-
-		pnl.filters, pnl.selectedFilterIdx = pnl.placeFilter(newFilter)
 
 		pnl.board = pnl.buildBoard()
 		return pnl, nil
@@ -141,7 +144,7 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "esc":
-			return pnl, func() tea.Msg { return CanceledMsg{} }
+			return pnl, func() tea.Msg { return CloseMsg{} }
 		case "p":
 			// Commit working state to snapshot and apply
 			pnl.filtersSnapshot = pnl.filters

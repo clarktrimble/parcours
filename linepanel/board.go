@@ -9,6 +9,9 @@ import (
 )
 
 // buildRankAndFile builds board files and ranks together in one pass
+// Todo: iterate over lp.columns (layout order) instead of lp.fields (store order)
+// to respect column ordering from layout file
+// Orrrrrrrrrrrrrrrrrrr: we depend on order from Store and can "fix" there??
 func (lp LinePanel) buildRankAndFile() (files board.Files, ranks board.Ranks, err error) {
 	ranks = make(board.Ranks, len(lp.lines))
 

@@ -92,7 +92,7 @@ func (pnl IntakePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "esc":
-			return pnl, func() tea.Msg { return DismissedMsg{} }
+			return pnl, func() tea.Msg { return CloseMsg{} }
 		case "enter":
 			return pnl.handleEnter()
 		}

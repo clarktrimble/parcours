@@ -70,7 +70,7 @@ func (pnl DetailPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "esc":
-			return pnl, func() tea.Msg { return DismissedMsg{} }
+			return pnl, func() tea.Msg { return CloseMsg{} }
 
 		case "up", "k":
 			if pnl.scrollOffset > 0 {

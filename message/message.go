@@ -1,14 +1,38 @@
 package message
 
 import (
+	tea "charm.land/bubbletea/v2"
+
 	nt "parcours/entity"
 )
 
-// lineMsg contains a full line
-// Todo: disambiguate line from lines elsewhere (thisn is full/raw)
-type LineMsg struct {
-	Line map[string]any
+// WrapCmd wraps a command or batch using a given wrapFunc.
+func WrapCmd(cmd tea.Cmd, wrapFunc func(tea.Msg) tea.Msg) tea.Cmd {
+	if cmd == nil {
+		return nil
+	}
+
+	return func() tea.Msg {
+		msg := cmd()
+		if msg == nil {
+			return nil
+		}
+
+		cmds, ok := msg.(tea.BatchMsg)
+		if !ok {
+			return wrapFunc(msg)
+		}
+
+		// recurse for batch
+		wrapped := make([]tea.Cmd, len(cmds))
+		for i, c := range cmds {
+			wrapped[i] = WrapCmd(c, wrapFunc)
+		}
+		return tea.BatchMsg(wrapped)
+	}
 }
+
+// Todo: can message pkg be obviated? or is like entity?
 
 // GetPageMsg signals to load a page of lines
 type GetPageMsg struct {
@@ -25,12 +49,6 @@ type CountMsg struct {
 type SelectedMsg struct {
 	Row int
 	Id  string
-}
-
-// OpenFilterMsg signals to open filter dialog with cell data
-type OpenFilterMsg struct {
-	Field string   // Field name from column
-	Value nt.Value // Value from cell
 }
 
 // SetFilterMsg signals to apply a filter to the data

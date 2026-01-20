@@ -21,6 +21,8 @@ import (
 // Todo: look for ignored cmd's thruout
 // Todo: disable accel for non-lp
 
+// Todo: failed to create table: Catalog Error: Table with name "logs" already exists! -- on new file
+
 // Store specifies a backing datastore.
 // Todo: rename Get/Set View
 // Todo: we now rely on col order from Store, arrange to set

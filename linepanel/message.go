@@ -4,42 +4,24 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	nt "parcours/entity"
+	"parcours/message"
 )
 
-// Msg is a msg that can be routed as linepanel.Msg.
+// Msg wraps a msg as originating from linepanel.
 type Msg struct {
 	Wrapped tea.Msg
 }
 
-// Unwrap returns the wrapped message (implements Unwrapper)
-func (m Msg) Unwrap() tea.Msg {
-	return m.Wrapped
+// Unwrap unwraps the wrapped msg.
+func (msg Msg) Unwrap() tea.Msg {
+	return msg.Wrapped
 }
 
-// Wrap wraps a cmd.
+// Wrap produces a cmd that will wrap its msg.
 func Wrap(cmd tea.Cmd) tea.Cmd {
-	if cmd == nil {
-		return nil
-	}
-
-	return func() tea.Msg {
-		msg := cmd()
-		if msg == nil {
-			return nil
-		}
-
-		// Todo: handle batch in intake and fp too plz
-		cmds, ok := msg.(tea.BatchMsg)
-		if !ok {
-			return Msg{Wrapped: msg}
-		}
-
-		wrapped := make([]tea.Cmd, len(cmds))
-		for i, cmd := range cmds {
-			wrapped[i] = Wrap(cmd)
-		}
-		return tea.BatchMsg(wrapped)
-	}
+	return message.WrapCmd(cmd, func(msg tea.Msg) tea.Msg {
+		return Msg{Wrapped: msg}
+	})
 }
 
 // PageMsg delivers a page of line data.
@@ -57,11 +39,24 @@ type ColumnsMsg struct {
 // ResetMsg resets the panel to initial state.
 type ResetMsg struct{}
 
+// ReloadColumnsMsg requests reloading columns from layout file.
+type ReloadColumnsMsg struct{}
+
 // OpenDetailMsg requests opening detail view for a line.
 type OpenDetailMsg struct {
 	Id      string
 	Columns []nt.Column
 }
 
-// DismissedMsg signals linepanel wants to close (esc pressed).
-type DismissedMsg struct{}
+// OpenFilterMsg requests opening filter panel.
+// If Field is set, a new filter is added; otherwise just view existing.
+type OpenFilterMsg struct {
+	Field string
+	Value nt.Value
+}
+
+// OpenIntakeMsg requests opening intake panel to select a new file.
+type OpenIntakeMsg struct{}
+
+// CloseMsg signals linepanel wants to close (esc pressed).
+type CloseMsg struct{}

@@ -181,7 +181,7 @@ func (m ModelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pop()                 // back to line
 		return m, func() tea.Msg { return linepanel.ResetMsg{} }
 
-	case message.OpenFilterMsg:
+	case linepanel.OpenFilterMsg:
 		filterPanel := filterpanel.New(m.ctx, m.logger, m.filters)
 		m.push(filterPanel)
 		// Send size then the OpenFilterMsg to set up the filter
@@ -199,18 +199,21 @@ func (m ModelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.stack[m.top()], _ = m.stack[m.top()].Update(panelSize)
 		return m, m.getLineToo(msg.Id)
 
-	case detail.DismissedMsg:
-		m.pop()
+	case linepanel.ReloadColumnsMsg:
+		return m, m.reloadColumnsToo()
+
+	case linepanel.OpenIntakeMsg:
+		intakePanel, err := intake.New(m.ctx, m.logger)
+		if err != nil {
+			m.errorString = err.Error()
+			return m, nil
+		}
+		m.push(intakePanel)
+		panelSize := tea.WindowSizeMsg{Width: m.Width, Height: m.Height - footerHeight}
+		m.stack[m.top()], _ = m.stack[m.top()].Update(panelSize)
 		return m, nil
 
-	case filterpanel.CanceledMsg:
-		m.pop()
-		return m, nil
-
-	case linepanel.DismissedMsg:
-		return m, tea.Quit
-
-	case intake.DismissedMsg:
+	case detail.CloseMsg, filterpanel.CloseMsg, linepanel.CloseMsg, intake.CloseMsg:
 		if len(m.stack) == 1 {
 			return m, tea.Quit
 		}
@@ -296,5 +299,27 @@ func (m ModelToo) getLineToo(id string) tea.Cmd {
 			return err
 		}
 		return detail.LineMsg{Line: line}
+	}
+}
+
+// reloadColumnsToo loads layout from file and sends column updates
+func (m ModelToo) reloadColumnsToo() tea.Cmd {
+	layout, err := loadLayout(layoutFile)
+	if err != nil {
+		return func() tea.Msg { return err }
+	}
+
+	err = layout.promote(m.Store)
+	if err != nil {
+		return func() tea.Msg { return err }
+	}
+
+	fields, _, err := m.Store.GetView()
+	if err != nil {
+		return func() tea.Msg { return err }
+	}
+
+	return func() tea.Msg {
+		return linepanel.ColumnsMsg{Columns: layout.Columns, Fields: fields}
 	}
 }

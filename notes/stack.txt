@@ -1,0 +1,72 @@
+
+● The stack is working well. Here's the current picture:
+
+  Stack states:
+  [intake]                    → start
+  [line]                      → after file selected
+  [line, detail]              → enter from line
+  [line, filter]              → c from line
+  [line, intake]              → o from line (not implemented yet)
+
+  Routing:
+  - Keypresses → top of stack
+  - Wrapped messages → unwrap, send to top
+  - Specific messages (GetPageMsg, SetFilterMsg, etc.) → model handles, often sends result to top
+  - WindowSizeMsg → broadcast to all
+
+  Push/Pop triggers:
+  | Action                  | Result                    |
+  |-------------------------|---------------------------|
+  | FileSelectedMsg         | replace stack with [line] |
+  | OpenDetailMsg           | push detail               |
+  | detail.DismissedMsg     | pop                       |
+  | OpenFilterMsg           | push filter               |
+  | filterpanel.CanceledMsg | pop                       |
+  | SetFilterMsg            | pop + reset               |
+  | linepanel.DismissedMsg  | quit                      |
+  | intake.DismissedMsg     | pop or quit               |
+
+  What's clean:
+  - No switch m.active for key routing
+  - Panels own their keys, emit semantic messages
+  - Model orchestrates stack, panels don't know about each other
+
+  What's left:
+  1. o key - push intake from line
+  2. r/f keys - reload (model methods)
+  3. Batch fix in intake/filterpanel Wrap functions
+
+More about whats left:
+● 1. o key - open intake from linepanel
+
+  linepanel handles o, emits OpenIntakeMsg. Model pushes fresh intake.
+
+  Tricky part: when file is selected from this pushed intake, what happens?
+  - Current FileSelectedMsg handling replaces entire stack with [line]
+  - But we might want to reload the existing line panel, not create new
+  - Or: always create fresh line, discard old. Simpler but loses scroll position.
+
+  Fix: handle "o" in model?
+  2. r / f keys - reload columns/filter
+
+  These call model methods that access Store and layout file:
+  func (m Model) reloadColumns() tea.Cmd  // reads layout.yaml, updates Store
+  func (m Model) reloadFilter() tea.Cmd   // reads layout.yaml, applies filter
+
+  Options:
+  - A: linepanel handles r/f, emits ReloadColumnsMsg/ReloadFilterMsg, model handles
+  - B: model handles these keys directly (exception to "panels own keys")
+
+  Option A is more consistent with our pattern. But these keys only make sense when linepanel is focused - which is always true when
+   linepanel is top of stack.
+
+  3. Batch fix in intake/filterpanel Wrap
+
+  Same fix we did in linepanel:
+  cmds, ok := msg.(tea.BatchMsg)
+  if !ok {
+      return Msg{Wrapped: msg}
+  }
+  // wrap each cmd...
+
+  Currently intake and filterpanel's Wrap don't handle batches. Might not hit issues yet, but should fix for consistency.
