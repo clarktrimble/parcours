@@ -58,3 +58,29 @@ type SetFilterMsg struct {
 	Filter  nt.Filter   // combined filter for Store
 	Filters []nt.Filter // full list for saving
 }
+
+// CloseMsg signals a panel wants to close.
+type CloseMsg struct{}
+
+// OpenDetailMsg requests opening detail view for a line.
+type OpenDetailMsg struct {
+	Id      string
+	Columns []nt.Column
+}
+
+// OpenFilterMsg requests opening filter panel.
+type OpenFilterMsg struct {
+	Field string
+	Value nt.Value
+}
+
+// OpenIntakeMsg requests opening intake panel.
+type OpenIntakeMsg struct{}
+
+// ReloadColumnsMsg requests reloading columns from layout file.
+type ReloadColumnsMsg struct{}
+
+// FileSelectedMsg signals a file was selected for loading.
+type FileSelectedMsg struct {
+	Path string
+}

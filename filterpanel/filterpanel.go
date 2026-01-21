@@ -3,27 +3,24 @@ package filterpanel
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 
 	"parcours/board"
 	"parcours/board/piece"
 	nt "parcours/entity"
-	"parcours/linepanel"
 	"parcours/message"
 )
 
 // FilterPanel displays a modal dialog for editing filters using Board
 type FilterPanel struct {
-	board   tea.Model
-	filters []nt.Filter
+	board  tea.Model
+	width  int
+	height int
 
-	width             int
-	height            int
+	filters           []nt.Filter
 	selectedFilterIdx int
-
-	// Snapshot for cancel support - restored on esc
-	filtersSnapshot []nt.Filter
 
 	ctx    context.Context
 	logger nt.Logger
@@ -73,13 +70,21 @@ var filterFiles = []board.File{
 	{Header: "Value", Width: 30},
 }
 
-func New(ctx context.Context, lgr nt.Logger, filters []nt.Filter) FilterPanel {
-	return FilterPanel{
-		ctx:             ctx,
-		logger:          lgr,
-		board:           board.Placeholder{},
-		filtersSnapshot: filters,
+func New(ctx context.Context, lgr nt.Logger, filters []nt.Filter, field string, value nt.Value, size tea.WindowSizeMsg) (FilterPanel, error) {
+
+	filters, idx := placeFilter(slices.Clone(filters), field, value)
+	pnl := FilterPanel{
+		ctx:               ctx,
+		logger:            lgr,
+		width:             size.Width,
+		height:            size.Height,
+		filters:           filters,
+		selectedFilterIdx: idx,
 	}
+
+	var err error
+	pnl.board, err = pnl.buildBoard()
+	return pnl, err
 }
 
 func (pnl FilterPanel) Init() tea.Cmd {
@@ -88,25 +93,6 @@ func (pnl FilterPanel) Init() tea.Cmd {
 
 func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-
-	case linepanel.OpenFilterMsg:
-		// Start from committed state
-		pnl.filters = make([]nt.Filter, len(pnl.filtersSnapshot))
-		copy(pnl.filters, pnl.filtersSnapshot)
-
-		// If Field is set, add a new filter; otherwise just view existing
-		if msg.Field != "" {
-			newFilter := nt.Filter{
-				Op:      nt.Ne,
-				Field:   msg.Field,
-				Value:   msg.Value,
-				Enabled: true,
-			}
-			pnl.filters, pnl.selectedFilterIdx = pnl.placeFilter(newFilter)
-		}
-
-		pnl.board = pnl.buildBoard()
-		return pnl, nil
 
 	case tea.WindowSizeMsg:
 		pnl.width = msg.Width
@@ -144,10 +130,8 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "esc":
-			return pnl, func() tea.Msg { return CloseMsg{} }
+			return pnl, func() tea.Msg { return message.CloseMsg{} }
 		case "p":
-			// Commit working state to snapshot and apply
-			pnl.filtersSnapshot = pnl.filters
 			return pnl, pnl.applyCmd()
 		case "delete":
 			// Delete selected filter
@@ -157,14 +141,14 @@ func (pnl FilterPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if pnl.selectedFilterIdx >= len(pnl.filters) && pnl.selectedFilterIdx > 0 {
 					pnl.selectedFilterIdx--
 				}
-				pnl.board = pnl.buildBoard()
+				return pnl.rebuildBoard()
 			}
 			return pnl, nil
 		default:
 			// Pass to board
 			var cmd tea.Cmd
 			pnl.board, cmd = pnl.board.Update(msg)
-			return pnl, Wrap(cmd)
+			return pnl, cmd
 		}
 	}
 
@@ -201,9 +185,19 @@ func (pnl FilterPanel) applyCmd() tea.Cmd {
 	}
 }
 
-func (pnl FilterPanel) buildBoard() tea.Model {
+func (pnl FilterPanel) rebuildBoard() (FilterPanel, tea.Cmd) {
+	var err error
+	pnl.board, err = pnl.buildBoard()
+	if err != nil {
+		return pnl, func() tea.Msg { return err }
+	}
+	return pnl, nil
+}
+
+func (pnl FilterPanel) buildBoard() (tea.Model, error) {
+
 	if len(pnl.filters) == 0 {
-		return board.NewPlaceholder("no filters")
+		return board.NewPlaceholder("no filters"), nil
 	}
 
 	var ranks []board.Rank
@@ -217,19 +211,29 @@ func (pnl FilterPanel) buildBoard() tea.Model {
 		ranks = append(ranks, rank)
 	}
 
-	// Todo: dont ignore error yah yahb
-	brd, _ := board.New(ranks, filterFiles, pnl.selectedFilterIdx, 0, pnl.width)
-	return brd
+	return board.New(ranks, filterFiles, pnl.selectedFilterIdx, 0, pnl.width)
 }
 
-func (pnl FilterPanel) placeFilter(f nt.Filter) ([]nt.Filter, int) {
-	for i, existing := range pnl.filters {
+func placeFilter(filters []nt.Filter, field string, value nt.Value) ([]nt.Filter, int) {
+
+	if field == "" {
+		return filters, 0
+	}
+
+	f := nt.Filter{
+		Op:      nt.Ne,
+		Field:   field,
+		Value:   value,
+		Enabled: true,
+	}
+
+	for i, existing := range filters {
 		if filtersMatch(existing, f) {
-			return pnl.filters, i
+			return filters, i
 		}
 	}
-	filters := append(pnl.filters, f)
-	return filters, len(filters) - 1
+
+	return append(filters, f), len(filters)
 }
 
 func filtersMatch(a, b nt.Filter) bool {

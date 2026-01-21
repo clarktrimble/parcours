@@ -11,6 +11,3 @@ type LineMsg struct {
 type ColumnsMsg struct {
 	Columns []nt.Column
 }
-
-// CloseMsg signals the detail panel wants to close.
-type CloseMsg struct{}

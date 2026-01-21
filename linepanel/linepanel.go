@@ -75,7 +75,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		lp.lines = msg.Lines
 		lp.total = msg.Count
 		lp, cmd := lp.applyPage()
-		return lp, tea.Batch(Wrap(cmd), func() tea.Msg {
+		return lp, tea.Batch(cmd, func() tea.Msg {
 			return message.CountMsg{Count: msg.Count}
 		})
 
@@ -111,7 +111,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Can't scroll further, move cursor to bottom
 			var cmd tea.Cmd
 			lp.board, cmd = lp.board.Update(board.MoveToMsg{MoveTo: board.Bottom})
-			return lp, Wrap(cmd)
+			return lp, cmd
 		case board.NavUp:
 			// Scroll up by msg.Ranks
 			if lp.offset > 0 {
@@ -124,7 +124,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Can't scroll further, move cursor to top
 			var cmd tea.Cmd
 			lp.board, cmd = lp.board.Update(board.MoveToMsg{MoveTo: board.Top})
-			return lp, Wrap(cmd)
+			return lp, cmd
 		case board.NavTop:
 			// Jump to first page
 			if lp.offset != 0 {
@@ -145,28 +145,28 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "esc":
-			return lp, func() tea.Msg { return CloseMsg{} }
+			return lp, func() tea.Msg { return message.CloseMsg{} }
 		case "c":
 			return lp, lp.filterCmd()
 		case "f":
-			return lp, func() tea.Msg { return OpenFilterMsg{} }
+			return lp, func() tea.Msg { return message.OpenFilterMsg{} }
 		case "r":
-			return lp, func() tea.Msg { return ReloadColumnsMsg{} }
+			return lp, func() tea.Msg { return message.ReloadColumnsMsg{} }
 		case "o":
-			return lp, func() tea.Msg { return OpenIntakeMsg{} }
+			return lp, func() tea.Msg { return message.OpenIntakeMsg{} }
 		case "enter":
 			return lp, lp.openDetailCmd()
 		}
 		// Pass other keys to board
 		var cmd tea.Cmd
 		lp.board, cmd = lp.board.Update(msg)
-		return lp, Wrap(cmd)
+		return lp, cmd
 
 	default:
 		// Pass everything else to board
 		var cmd tea.Cmd
 		lp.board, cmd = lp.board.Update(msg)
-		return lp, Wrap(cmd)
+		return lp, cmd
 	}
 }
 
@@ -213,7 +213,7 @@ func (lp LinePanel) filterCmd() tea.Cmd {
 		return func() tea.Msg { return err }
 	}
 	return func() tea.Msg {
-		return OpenFilterMsg{
+		return message.OpenFilterMsg{
 			Field: field,
 			Value: value,
 		}
@@ -228,7 +228,7 @@ func (lp LinePanel) openDetailCmd() tea.Cmd {
 	id := lp.lines[lp.currentRank].Id
 	cols := lp.columns
 	return func() tea.Msg {
-		return OpenDetailMsg{Id: id, Columns: cols}
+		return message.OpenDetailMsg{Id: id, Columns: cols}
 	}
 }
 

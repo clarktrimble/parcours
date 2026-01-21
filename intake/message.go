@@ -6,14 +6,6 @@ import (
 	"parcours/message"
 )
 
-// FileSelectedMsg signals that a file was selected for loading
-type FileSelectedMsg struct {
-	Path string
-}
-
-// CloseMsg signals intake wants to close (esc pressed).
-type CloseMsg struct{}
-
 // Msg wraps a msg as originating from intake.
 type Msg struct {
 	Wrapped tea.Msg

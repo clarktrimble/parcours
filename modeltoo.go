@@ -16,29 +16,29 @@ import (
 )
 
 /*
-  Needs attention:
-  1. o key - open intake from linepanel
-  2. r / f keys - reload columns/filter (model methods)
+Needs attention:
+1. o key - open intake from linepanel
+2. r / f keys - reload columns/filter (model methods)
 */
+const (
+	layoutFile   = "layout.yaml"
+	footerHeight = 1
+)
 
-// Unwrapper is implemented by wrapped messages for unified handling
-type Unwrapper interface {
-	Unwrap() tea.Msg
-}
-
-// ModelToo is an experimental model using stack-based routing
+// ModelToo is the model using stack-based routing
 type ModelToo struct {
 	Store  Store
 	logger nt.Logger
 	ctx    context.Context
 
-	stack       []tea.Model  // focus stack - top receives messages
+	stack       []tea.Model // focus stack - top receives messages
 	errorString string
 	filters     []nt.Filter // for recreating filter panel
 
 	initialized bool
 	Width       int
 	Height      int
+	panelSize   tea.WindowSizeMsg
 	total       int
 
 	selectedRow int
@@ -47,7 +47,7 @@ type ModelToo struct {
 
 // NewModelToo creates a new stack-based model
 func NewModelToo(ctx context.Context, store Store, lgr nt.Logger) (model ModelToo, err error) {
-	intakePanel, err := intake.New(ctx, lgr)
+	intakePanel, err := intake.New(ctx, lgr, tea.WindowSizeMsg{})
 	if err != nil {
 		return
 	}
@@ -77,6 +77,12 @@ func (m *ModelToo) pop() {
 	if len(m.stack) > 1 {
 		m.stack = m.stack[:len(m.stack)-1]
 	}
+}
+
+// withError sets the error string and returns the model
+func (m ModelToo) withError(err error) (tea.Model, tea.Cmd) {
+	m.errorString = err.Error()
+	return m, nil
 }
 
 // loadFile loads a file and pushes linepanel onto stack
@@ -120,36 +126,85 @@ func (m ModelToo) Init() tea.Cmd {
 
 func (m ModelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
-	top := m.top()
+	key, ok := msg.(tea.KeyPressMsg)
+	if ok {
+		if m.errorString != "" {
+			m.errorString = ""
+		}
+		if key.String() == "ctrl+c" || key.String() == "q" {
+			return m, tea.Quit
+		}
+	}
 
 	switch msg := msg.(type) {
 
-	// Broadcast to all panels in stack
+	// Lifecycle
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
-		if !m.initialized {
-			m.initialized = true
-		}
-
-		panelSize := tea.WindowSizeMsg{Width: msg.Width, Height: msg.Height - footerHeight}
+		m.panelSize = tea.WindowSizeMsg{Width: msg.Width, Height: msg.Height - footerHeight}
+		m.initialized = true
 
 		var cmds []tea.Cmd
 		for i := range m.stack {
-			m.stack[i], cmd = m.stack[i].Update(panelSize)
+			m.stack[i], cmd = m.stack[i].Update(m.panelSize)
 			cmds = append(cmds, cmd)
 		}
 		return m, tea.Batch(cmds...)
 
-	// Unwrap and send to top
-	case Unwrapper:
-		m.stack[top], cmd = m.stack[top].Update(msg.Unwrap())
+	// Todo: loadFile is broken in Store; when fixed, consider having loadFile
+	// accept panelSize and set it on the linepanel it creates (like New funcs)
+	case message.FileSelectedMsg:
+		err := m.loadFile(msg.Path)
+		if err != nil {
+			return m.withError(err)
+		}
+		m.stack[m.top()], cmd = m.stack[m.top()].Update(m.panelSize)
 		return m, cmd
 
-	// Messages that model handles (mediates Store access)
-	case message.GetPageMsg:
-		return m, m.getPageToo(msg.Offset, msg.Size)
+	// Todo: think thru error handling moar
+	case error:
+		return m.withError(msg)
 
+	// Push
+	case message.OpenFilterMsg:
+		panel, err := filterpanel.New(m.ctx, m.logger, m.filters, msg.Field, msg.Value, m.panelSize)
+		if err != nil {
+			return m.withError(err)
+		}
+		m.push(panel)
+		return m, nil
+
+	case message.OpenDetailMsg:
+		m.push(detail.New(m.ctx, msg.Columns, m.logger, m.panelSize))
+		return m, m.getLineToo(msg.Id)
+
+	case message.OpenIntakeMsg:
+		intakePanel, err := intake.New(m.ctx, m.logger, m.panelSize)
+		if err != nil {
+			return m.withError(err)
+		}
+		m.push(intakePanel)
+		return m, nil
+
+	// Pop
+	case message.SetFilterMsg:
+		m.pop()
+		err := m.Store.SetView(msg.Filter, nil)
+		if err != nil {
+			return m.withError(err)
+		}
+		m.filters = msg.Filters
+		return m, func() tea.Msg { return linepanel.ResetMsg{} }
+
+	case message.CloseMsg:
+		if len(m.stack) == 1 {
+			return m, tea.Quit
+		}
+		m.pop()
+		return m, nil
+
+	// State
 	case message.CountMsg:
 		m.total = msg.Count
 		return m, nil
@@ -159,89 +214,15 @@ func (m ModelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.selectedId = msg.Id
 		return m, nil
 
-	case intake.FileSelectedMsg:
-		err := m.loadFile(msg.Path)
-		if err != nil {
-			m.errorString = err.Error()
-			return m, nil
-		}
-		// Send size to new linepanel
-		panelSize := tea.WindowSizeMsg{Width: m.Width, Height: m.Height - footerHeight}
-		m.stack[m.top()], cmd = m.stack[m.top()].Update(panelSize)
-		return m, cmd
+	// Data
+	case message.GetPageMsg:
+		return m, m.getPageToo(msg.Offset, msg.Size)
 
-	case message.SetFilterMsg:
-		err := m.Store.SetView(msg.Filter, nil)
-		if err != nil {
-			m.errorString = err.Error()
-			m.pop() // back to line
-			return m, nil
-		}
-		m.filters = msg.Filters // save for next time
-		m.pop()                 // back to line
-		return m, func() tea.Msg { return linepanel.ResetMsg{} }
-
-	case linepanel.OpenFilterMsg:
-		filterPanel := filterpanel.New(m.ctx, m.logger, m.filters)
-		m.push(filterPanel)
-		// Send size then the OpenFilterMsg to set up the filter
-		panelSize := tea.WindowSizeMsg{Width: m.Width, Height: m.Height - footerHeight}
-		m.stack[m.top()], _ = m.stack[m.top()].Update(panelSize)
-		m.stack[m.top()], cmd = m.stack[m.top()].Update(msg)
-		return m, cmd
-
-	case linepanel.OpenDetailMsg:
-		// Push detail panel and get line data
-		detailPanel := detail.NewDetailPanel(m.ctx, msg.Columns, m.logger)
-		m.push(detailPanel)
-		// Send size to new panel
-		panelSize := tea.WindowSizeMsg{Width: m.Width, Height: m.Height - footerHeight}
-		m.stack[m.top()], _ = m.stack[m.top()].Update(panelSize)
-		return m, m.getLineToo(msg.Id)
-
-	case linepanel.ReloadColumnsMsg:
+	case message.ReloadColumnsMsg:
 		return m, m.reloadColumnsToo()
 
-	case linepanel.OpenIntakeMsg:
-		intakePanel, err := intake.New(m.ctx, m.logger)
-		if err != nil {
-			m.errorString = err.Error()
-			return m, nil
-		}
-		m.push(intakePanel)
-		panelSize := tea.WindowSizeMsg{Width: m.Width, Height: m.Height - footerHeight}
-		m.stack[m.top()], _ = m.stack[m.top()].Update(panelSize)
-		return m, nil
-
-	case detail.CloseMsg, filterpanel.CloseMsg, linepanel.CloseMsg, intake.CloseMsg:
-		if len(m.stack) == 1 {
-			return m, tea.Quit
-		}
-		m.pop()
-		return m, nil
-
-	case error:
-		m.errorString = msg.Error()
-		return m, nil
-
-	// Global keys
-	case tea.KeyPressMsg:
-		if m.errorString != "" {
-			m.errorString = ""
-		}
-
-		switch msg.String() {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		}
-
-		// Everything else to top of stack
-		m.stack[top], cmd = m.stack[top].Update(msg)
-		return m, cmd
-
-	// Everything else to top of stack
 	default:
-		m.stack[top], cmd = m.stack[top].Update(msg)
+		m.stack[m.top()], cmd = m.stack[m.top()].Update(msg)
 		return m, cmd
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 
 	nt "parcours/entity"
+	"parcours/message"
 )
 
 // Todo: honor width
@@ -32,11 +33,13 @@ type DetailPanel struct {
 	logger nt.Logger
 }
 
-func NewDetailPanel(ctx context.Context, columns []nt.Column, lgr nt.Logger) DetailPanel {
+func New(ctx context.Context, columns []nt.Column, lgr nt.Logger, size tea.WindowSizeMsg) DetailPanel {
 	return DetailPanel{
 		columns: columns,
 		ctx:     ctx,
 		logger:  lgr,
+		width:   size.Width,
+		height:  size.Height,
 	}
 }
 
@@ -70,7 +73,7 @@ func (pnl DetailPanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "esc":
-			return pnl, func() tea.Msg { return CloseMsg{} }
+			return pnl, func() tea.Msg { return message.CloseMsg{} }
 
 		case "up", "k":
 			if pnl.scrollOffset > 0 {

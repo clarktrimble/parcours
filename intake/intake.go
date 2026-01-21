@@ -12,6 +12,7 @@ import (
 	"parcours/board"
 	"parcours/board/piece"
 	nt "parcours/entity"
+	"parcours/message"
 )
 
 // IntakePanel displays a file browser for selecting log files
@@ -48,7 +49,7 @@ var intakeFiles = []board.File{
 	{Header: "Modified", Width: 12},
 }
 
-func New(ctx context.Context, lgr nt.Logger) (IntakePanel, error) {
+func New(ctx context.Context, lgr nt.Logger, size tea.WindowSizeMsg) (IntakePanel, error) {
 
 	// Todo: pass cwd in
 	cwd, err := os.Getwd()
@@ -60,7 +61,8 @@ func New(ctx context.Context, lgr nt.Logger) (IntakePanel, error) {
 		currentPath: cwd,
 		ctx:         ctx,
 		logger:      lgr,
-		board:       board.Placeholder{},
+		width:       size.Width,
+		height:      size.Height,
 	}
 
 	err = pnl.readDir()
@@ -68,7 +70,8 @@ func New(ctx context.Context, lgr nt.Logger) (IntakePanel, error) {
 		return pnl, err
 	}
 
-	return pnl, nil
+	pnl.board, err = pnl.buildBoard()
+	return pnl, err
 }
 
 func (pnl IntakePanel) Init() tea.Cmd {
@@ -81,9 +84,7 @@ func (pnl IntakePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		pnl.width = msg.Width
 		pnl.height = msg.Height
-		pnl.board = pnl.buildBoard()
-		pnl.board, _ = pnl.board.Update(msg)
-		return pnl, nil
+		return pnl.rebuildBoard()
 
 	case board.PositionMsg:
 		pnl.selectedIdx = msg.Rank
@@ -92,7 +93,7 @@ func (pnl IntakePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "esc":
-			return pnl, func() tea.Msg { return CloseMsg{} }
+			return pnl, func() tea.Msg { return message.CloseMsg{} }
 		case "enter":
 			return pnl.handleEnter()
 		}
@@ -100,7 +101,7 @@ func (pnl IntakePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	pnl.board, cmd = pnl.board.Update(msg)
-	return pnl, Wrap(cmd)
+	return pnl, cmd
 }
 
 func (pnl IntakePanel) View() tea.View {
@@ -121,7 +122,7 @@ func (pnl IntakePanel) handleEnter() (IntakePanel, tea.Cmd) {
 				return pnl, func() tea.Msg { return err }
 			}
 			pnl.selectedIdx = 0
-			pnl.board = pnl.buildBoard()
+			return pnl.rebuildBoard()
 		}
 		return pnl, nil
 	}
@@ -142,13 +143,12 @@ func (pnl IntakePanel) handleEnter() (IntakePanel, tea.Cmd) {
 			return pnl, func() tea.Msg { return err }
 		}
 		pnl.selectedIdx = 0
-		pnl.board = pnl.buildBoard()
-		return pnl, nil
+		return pnl.rebuildBoard()
 	}
 
 	// File selected - emit message
 	return pnl, func() tea.Msg {
-		return FileSelectedMsg{Path: fullPath}
+		return message.FileSelectedMsg{Path: fullPath}
 	}
 }
 
@@ -161,7 +161,16 @@ func (pnl *IntakePanel) readDir() error {
 	return nil
 }
 
-func (pnl IntakePanel) buildBoard() tea.Model {
+func (pnl IntakePanel) rebuildBoard() (IntakePanel, tea.Cmd) {
+	var err error
+	pnl.board, err = pnl.buildBoard()
+	if err != nil {
+		return pnl, func() tea.Msg { return err }
+	}
+	return pnl, nil
+}
+
+func (pnl IntakePanel) buildBoard() (tea.Model, error) {
 	var ranks []board.Rank
 
 	// Add ".." entry for parent navigation
@@ -201,8 +210,7 @@ func (pnl IntakePanel) buildBoard() tea.Model {
 		pnl.selectedIdx = len(ranks) - 1
 	}
 
-	brd, _ := board.New(ranks, intakeFiles, pnl.selectedIdx, 0, pnl.width)
-	return brd
+	return board.New(ranks, intakeFiles, pnl.selectedIdx, 0, pnl.width)
 }
 
 func formatSize(bytes int64) string {

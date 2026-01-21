@@ -38,25 +38,3 @@ type ColumnsMsg struct {
 
 // ResetMsg resets the panel to initial state.
 type ResetMsg struct{}
-
-// ReloadColumnsMsg requests reloading columns from layout file.
-type ReloadColumnsMsg struct{}
-
-// OpenDetailMsg requests opening detail view for a line.
-type OpenDetailMsg struct {
-	Id      string
-	Columns []nt.Column
-}
-
-// OpenFilterMsg requests opening filter panel.
-// If Field is set, a new filter is added; otherwise just view existing.
-type OpenFilterMsg struct {
-	Field string
-	Value nt.Value
-}
-
-// OpenIntakeMsg requests opening intake panel to select a new file.
-type OpenIntakeMsg struct{}
-
-// CloseMsg signals linepanel wants to close (esc pressed).
-type CloseMsg struct{}

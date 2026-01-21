@@ -16,9 +16,6 @@ func (msg Msg) Unwrap() tea.Msg {
 	return msg.Wrapped
 }
 
-// CloseMsg signals the filter panel wants to close.
-type CloseMsg struct{}
-
 // Wrap produces a cmd that will wrap its msg.
 func Wrap(cmd tea.Cmd) tea.Cmd {
 	return message.WrapCmd(cmd, func(msg tea.Msg) tea.Msg {
