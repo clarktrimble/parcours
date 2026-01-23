@@ -14,10 +14,9 @@ import (
 )
 
 const (
-	logFile string = "parcours.log"
-	logMax  int    = 999
-	//cfgFile string      = "powercycle.yml"
-	mode os.FileMode = 0600
+	logFile string      = "parcours.log"
+	logMax  int         = 999
+	mode    os.FileMode = 0600
 )
 
 func main() {
@@ -44,7 +43,7 @@ func main() {
 
 	// Todo: dont panic
 
-	model, err := parcours.NewModelToo(ctx, dk, lgr)
+	model, err := parcours.NewModel(ctx, dk, lgr)
 	if err != nil {
 		panic(err)
 	}

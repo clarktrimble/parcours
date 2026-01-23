@@ -13,27 +13,26 @@ type Layout struct {
 	Filter  nt.Filter   `yaml:"filter,omitempty"`
 }
 
-func loadLayout(path string) (*Layout, error) {
+func loadLayout(path string) (Layout, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, err
+		return Layout{}, err
 	}
 
 	var layout Layout
 	if err := yaml.Unmarshal(data, &layout); err != nil {
-		return nil, err
+		return Layout{}, err
 	}
 
-	return &layout, nil
+	return layout, nil
 }
 
 // promote promotes fields in layout
 // Todo: cols not layout here yeah?
-func (layout *Layout) promote(store Store) (err error) {
-
+func (layout Layout) promote(store Store) error {
 	fields, _, err := store.GetView()
 	if err != nil {
-		return
+		return err
 	}
 
 	promoted := make(map[string]bool)
@@ -45,11 +44,10 @@ func (layout *Layout) promote(store Store) (err error) {
 		if promoted[col.Field] || col.Demote {
 			continue
 		}
-
 		err = store.Promote(col.Field)
 		if err != nil {
-			return
+			return err
 		}
 	}
-	return
+	return nil
 }

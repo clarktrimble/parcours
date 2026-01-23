@@ -25,8 +25,8 @@ columns:
     width: 10
   - field: routine_id
     width: 10
-#  - field: app_id
-#    width: 8
+  - field: app_id
+    width: 8
 #  - field: run_id
 #    width: 10
   - field: config

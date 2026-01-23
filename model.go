@@ -15,25 +15,20 @@ import (
 	"parcours/style"
 )
 
-/*
-Needs attention:
-1. o key - open intake from linepanel
-2. r / f keys - reload columns/filter (model methods)
-*/
 const (
 	layoutFile   = "layout.yaml"
 	footerHeight = 1
 )
 
-// ModelToo is the model using stack-based routing
-type ModelToo struct {
+// Model is the root bt model.
+type Model struct {
 	Store  Store
 	logger nt.Logger
 	ctx    context.Context
 
-	stack       []tea.Model // focus stack - top receives messages
+	stack       []tea.Model
+	filters     []nt.Filter
 	errorString string
-	filters     []nt.Filter // for recreating filter panel
 
 	initialized bool
 	Width       int
@@ -45,14 +40,15 @@ type ModelToo struct {
 	selectedId  string
 }
 
-// NewModelToo creates a new stack-based model
-func NewModelToo(ctx context.Context, store Store, lgr nt.Logger) (model ModelToo, err error) {
+// NewModel creates a model with intake panel.
+func NewModel(ctx context.Context, store Store, lgr nt.Logger) (model Model, err error) {
+
 	intakePanel, err := intake.New(ctx, lgr, tea.WindowSizeMsg{})
 	if err != nil {
 		return
 	}
 
-	model = ModelToo{
+	model = Model{
 		Store:  store,
 		ctx:    ctx,
 		logger: lgr,
@@ -62,70 +58,71 @@ func NewModelToo(ctx context.Context, store Store, lgr nt.Logger) (model ModelTo
 	return
 }
 
-// top returns the index of the top of the stack
-func (m ModelToo) top() int {
+func (m Model) top() int {
 	return len(m.stack) - 1
 }
 
-// push adds a panel to the stack
-func (m *ModelToo) push(panel tea.Model) {
+func (m Model) push(panel tea.Model) Model {
 	m.stack = append(m.stack, panel)
+	return m
 }
 
-// pop removes the top panel from the stack
-func (m *ModelToo) pop() {
+func (m Model) pop() Model {
 	if len(m.stack) > 1 {
 		m.stack = m.stack[:len(m.stack)-1]
 	}
+	return m
 }
 
-// withError sets the error string and returns the model
-func (m ModelToo) withError(err error) (tea.Model, tea.Cmd) {
+func (m Model) withError(err error) (tea.Model, tea.Cmd) {
 	m.errorString = err.Error()
 	return m, nil
 }
 
-// loadFile loads a file and pushes linepanel onto stack
-func (m *ModelToo) loadFile(path string) error {
+// Todo: find home
+// and generally straighten: dry with reloadColumns, unfuzzle store View stuff
+func (m Model) loadFile(path string) (Model, error) {
 	err := m.Store.Load(path, 0)
 	if err != nil {
-		return err
+		return m, err
 	}
 
 	layout, err := loadLayout(layoutFile)
 	if err != nil {
-		return err
+		return m, err
 	}
 
 	err = layout.promote(m.Store)
 	if err != nil {
-		return err
+		return m, err
 	}
 
 	err = m.Store.SetView(layout.Filter, nil)
 	if err != nil {
-		return err
+		return m, err
 	}
 
 	fields, count, err := m.Store.GetView()
 	if err != nil {
-		return err
+		return m, err
 	}
 
 	linePanel := linepanel.New(m.ctx, layout.Columns, fields, count, m.logger)
 
-	// Replace stack with just linepanel (discard intake)
+	// Replace the stack
 	m.stack = []tea.Model{linePanel}
 
+	return m, nil
+}
+
+func (m Model) Init() tea.Cmd {
 	return nil
 }
 
-func (m ModelToo) Init() tea.Cmd {
-	return nil
-}
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
-func (m ModelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+
 	key, ok := msg.(tea.KeyPressMsg)
 	if ok {
 		if m.errorString != "" {
@@ -155,15 +152,16 @@ func (m ModelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Todo: loadFile is broken in Store; when fixed, consider having loadFile
 	// accept panelSize and set it on the linepanel it creates (like New funcs)
 	case message.FileSelectedMsg:
-		err := m.loadFile(msg.Path)
+		var err error
+		m, err = m.loadFile(msg.Path)
 		if err != nil {
 			return m.withError(err)
 		}
 		m.stack[m.top()], cmd = m.stack[m.top()].Update(m.panelSize)
 		return m, cmd
 
-	// Todo: think thru error handling moar
 	case error:
+		// Todo: think thru error handling moar
 		return m.withError(msg)
 
 	// Push
@@ -172,37 +170,38 @@ func (m ModelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if err != nil {
 			return m.withError(err)
 		}
-		m.push(panel)
-		return m, nil
+		return m.push(panel), nil
 
 	case message.OpenDetailMsg:
-		m.push(detail.New(m.ctx, msg.Columns, m.logger, m.panelSize))
-		return m, m.getLineToo(msg.Id)
+		return m.push(detail.New(m.ctx, msg.Columns, m.logger, m.panelSize)), m.getLine(msg.Id)
 
 	case message.OpenIntakeMsg:
 		intakePanel, err := intake.New(m.ctx, m.logger, m.panelSize)
 		if err != nil {
 			return m.withError(err)
 		}
-		m.push(intakePanel)
-		return m, nil
+		return m.push(intakePanel), nil
 
 	// Pop
 	case message.SetFilterMsg:
-		m.pop()
+		// close filter panel
+		m = m.pop()
+
+		// apply new filter
 		err := m.Store.SetView(msg.Filter, nil)
 		if err != nil {
 			return m.withError(err)
 		}
 		m.filters = msg.Filters
+
+		// reset line panel
 		return m, func() tea.Msg { return linepanel.ResetMsg{} }
 
 	case message.CloseMsg:
 		if len(m.stack) == 1 {
 			return m, tea.Quit
 		}
-		m.pop()
-		return m, nil
+		return m.pop(), nil
 
 	// State
 	case message.CountMsg:
@@ -216,10 +215,10 @@ func (m ModelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Data
 	case message.GetPageMsg:
-		return m, m.getPageToo(msg.Offset, msg.Size)
+		return m, m.getPage(msg.Offset, msg.Size)
 
 	case message.ReloadColumnsMsg:
-		return m, m.reloadColumnsToo()
+		return m, m.reloadColumns()
 
 	default:
 		m.stack[m.top()], cmd = m.stack[m.top()].Update(msg)
@@ -227,12 +226,11 @@ func (m ModelToo) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m ModelToo) View() tea.View {
+func (m Model) View() tea.View {
 	if !m.initialized {
 		return tea.NewView("Loading...")
 	}
 
-	// Render all panels in stack (bottom to top)
 	canvas := lipgloss.NewCanvas(m.Width, m.Height)
 	for _, panel := range m.stack {
 		canvas.Compose(panel.View().Content)
@@ -252,8 +250,8 @@ func (m ModelToo) View() tea.View {
 	return view
 }
 
-// getPageToo fetches a page of lines from the store
-func (m ModelToo) getPageToo(offset, size int) tea.Cmd {
+func (m Model) getPage(offset, size int) tea.Cmd {
+
 	return func() tea.Msg {
 		_, count, err := m.Store.GetView()
 		if err != nil {
@@ -272,8 +270,8 @@ func (m ModelToo) getPageToo(offset, size int) tea.Cmd {
 	}
 }
 
-// getLineToo fetches a full line from the store
-func (m ModelToo) getLineToo(id string) tea.Cmd {
+func (m Model) getLine(id string) tea.Cmd {
+
 	return func() tea.Msg {
 		line, err := m.Store.GetLine(id)
 		if err != nil {
@@ -283,8 +281,8 @@ func (m ModelToo) getLineToo(id string) tea.Cmd {
 	}
 }
 
-// reloadColumnsToo loads layout from file and sends column updates
-func (m ModelToo) reloadColumnsToo() tea.Cmd {
+// reloadColumns loads layout from file and sends column updates
+func (m Model) reloadColumns() tea.Cmd {
 	layout, err := loadLayout(layoutFile)
 	if err != nil {
 		return func() tea.Msg { return err }
