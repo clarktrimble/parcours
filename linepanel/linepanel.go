@@ -43,17 +43,14 @@ type LinePanel struct {
 	logger nt.Logger
 }
 
-func New(ctx context.Context, columns []nt.Column, fields []nt.Field, count int, lgr nt.Logger) LinePanel {
-	lp := LinePanel{
-		columns: columns,
-		fields:  fields,
-		total:   count,
-		ctx:     ctx,
-		logger:  lgr,
-		board:   board.NewPlaceholder("Loading..."),
+func New(ctx context.Context, lgr nt.Logger, size tea.WindowSizeMsg) LinePanel {
+	return LinePanel{
+		ctx:    ctx,
+		logger: lgr,
+		width:  size.Width,
+		height: size.Height,
+		board:  board.NewPlaceholder("Loading..."),
 	}
-	lp.buildColMap()
-	return lp
 }
 
 func (lp LinePanel) Init() tea.Cmd {

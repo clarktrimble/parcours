@@ -84,3 +84,10 @@ type ReloadColumnsMsg struct{}
 type FileSelectedMsg struct {
 	Path string
 }
+
+// FileLoadedMsg signals a file has been loaded into the store.
+type FileLoadedMsg struct {
+	Path    string
+	Columns []nt.Column
+	Fields  []nt.Field
+}

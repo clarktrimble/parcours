@@ -2,8 +2,17 @@ package parcours
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+
+	tea "charm.land/bubbletea/v2"
 
 	nt "parcours/entity"
+	"parcours/util"
+)
+
+const (
+	stateFile = "parcours.yml"
 )
 
 // Todo: look at delish remote_ip logging, borken with "["?
@@ -48,17 +57,62 @@ type Store interface {
 	Tail(ctx context.Context) (lines <-chan nt.Line, err error)
 }
 
-type Config struct{}
-
-type Parcours struct {
-	store  Store
-	logger nt.Logger
+type State struct {
+	LastFile string `yaml:"last_file"`
 }
 
-func (cfg *Config) New(store Store, lgr nt.Logger) *Parcours {
+// Todo: move to util
+func workDir(dir string) string {
+	if dir == "" {
+		dir, _ = os.Getwd()
+	}
+	return dir
+}
+
+type Config struct {
+	workDir string
+}
+
+type Parcours struct {
+	state   State
+	workDir string
+	store   Store
+	logger  nt.Logger
+}
+
+func (cfg *Config) New(ctx context.Context, store Store, lgr nt.Logger) *Parcours {
+
+	dir := workDir(cfg.workDir)
+	statePath := filepath.Join(dir, stateFile)
+	state := State{}
+
+	err := util.LoadConfig(&state, statePath)
+	if err != nil {
+		lgr.Info(ctx, "no saved state", "path", statePath)
+	}
 
 	return &Parcours{
-		store:  store,
-		logger: lgr,
+		state:   state,
+		workDir: dir,
+		store:   store,
+		logger:  lgr,
 	}
+}
+
+func (p *Parcours) Run(ctx context.Context) error {
+
+	model, err := NewModel(ctx, p.store, p.logger, p.state.LastFile)
+	if err != nil {
+		return err
+	}
+
+	finalModel, err := tea.NewProgram(model).Run()
+	if err != nil {
+		return err
+	}
+
+	p.state.LastFile = finalModel.(Model).lastFile
+
+	err = util.WriteConfig(p.state, filepath.Join(p.workDir, stateFile), 0600)
+	return err
 }

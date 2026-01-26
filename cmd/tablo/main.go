@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
-	tea "charm.land/bubbletea/v2"
 	"github.com/clarktrimble/sabot"
 	_ "github.com/marcboeker/go-duckdb"
 
@@ -29,12 +29,6 @@ func main() {
 	lgr := logCfg.New(file)
 	ctx := context.Background()
 
-	// load cfg
-
-	//cfg := &Config{Version: version, Release: release, PowerCycle: &powercycle.Config{}}
-	//cfgErr := util.LoadConfig(cfg, cfgFile)
-	//lgr.Info(ctx, "starting", "cfg", cfg)
-
 	dk, err := duck.New(lgr)
 	if err != nil {
 		panic(err)
@@ -43,13 +37,12 @@ func main() {
 
 	// Todo: dont panic
 
-	model, err := parcours.NewModel(ctx, dk, lgr)
-	if err != nil {
-		panic(err)
-	}
+	cfg := &parcours.Config{}
+	app := cfg.New(ctx, dk, lgr)
 
-	_, err = tea.NewProgram(model).Run()
+	err = app.Run(ctx)
 	if err != nil {
-		panic(err)
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
 }

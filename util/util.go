@@ -10,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Todo: copied from dft, modularize!
+// Todo: copied from dft, modernize and modularize!
 
 func OpenLog(path string, mode os.FileMode) (file io.Writer) {
 

@@ -11,3 +11,5 @@ junk/
 bin/
 
 !test/**/*.log
+
+parcours.yml

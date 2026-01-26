@@ -2,6 +2,7 @@ package parcours
 
 import (
 	"context"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -22,9 +23,10 @@ const (
 
 // Model is the root bt model.
 type Model struct {
-	Store  Store
-	logger nt.Logger
-	ctx    context.Context
+	Store    Store
+	lastFile string
+	logger   nt.Logger
+	ctx      context.Context
 
 	stack       []tea.Model
 	filters     []nt.Filter
@@ -41,18 +43,19 @@ type Model struct {
 }
 
 // NewModel creates a model with intake panel.
-func NewModel(ctx context.Context, store Store, lgr nt.Logger) (model Model, err error) {
+func NewModel(ctx context.Context, store Store, lgr nt.Logger, lastFile string) (model Model, err error) {
 
-	intakePanel, err := intake.New(ctx, lgr, tea.WindowSizeMsg{})
+	intakePanel, err := intake.New(ctx, lgr, tea.WindowSizeMsg{}, lastFile)
 	if err != nil {
 		return
 	}
 
 	model = Model{
-		Store:  store,
-		ctx:    ctx,
-		logger: lgr,
-		stack:  []tea.Model{intakePanel},
+		Store:    store,
+		lastFile: lastFile,
+		ctx:      ctx,
+		logger:   lgr,
+		stack:    []tea.Model{intakePanel},
 	}
 
 	return
@@ -76,42 +79,6 @@ func (m Model) pop() Model {
 
 func (m Model) withError(err error) (tea.Model, tea.Cmd) {
 	m.errorString = err.Error()
-	return m, nil
-}
-
-// Todo: find home
-// and generally straighten: dry with reloadColumns, unfuzzle store View stuff
-func (m Model) loadFile(path string) (Model, error) {
-	err := m.Store.Load(path, 0)
-	if err != nil {
-		return m, err
-	}
-
-	layout, err := loadLayout(layoutFile)
-	if err != nil {
-		return m, err
-	}
-
-	err = layout.promote(m.Store)
-	if err != nil {
-		return m, err
-	}
-
-	err = m.Store.SetView(layout.Filter, nil)
-	if err != nil {
-		return m, err
-	}
-
-	fields, count, err := m.Store.GetView()
-	if err != nil {
-		return m, err
-	}
-
-	linePanel := linepanel.New(m.ctx, layout.Columns, fields, count, m.logger)
-
-	// Replace the stack
-	m.stack = []tea.Model{linePanel}
-
 	return m, nil
 }
 
@@ -149,16 +116,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case message.FileSelectedMsg:
+		linePanel := linepanel.New(m.ctx, m.logger, m.panelSize)
+		m.stack = []tea.Model{linePanel}
+		return m, m.loadStore(msg.Path)
+
 	// Todo: loadFile is broken in Store; when fixed, consider having loadFile
 	// accept panelSize and set it on the linepanel it creates (like New funcs)
-	case message.FileSelectedMsg:
-		var err error
-		m, err = m.loadFile(msg.Path)
-		if err != nil {
-			return m.withError(err)
+	case message.FileLoadedMsg:
+		m.lastFile = msg.Path
+		return m, func() tea.Msg {
+			return linepanel.ColumnsMsg{Columns: msg.Columns, Fields: msg.Fields}
 		}
-		m.stack[m.top()], cmd = m.stack[m.top()].Update(m.panelSize)
-		return m, cmd
 
 	case error:
 		// Todo: think thru error handling moar
@@ -176,7 +145,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.push(detail.New(m.ctx, msg.Columns, m.logger, m.panelSize)), m.getLine(msg.Id)
 
 	case message.OpenIntakeMsg:
-		intakePanel, err := intake.New(m.ctx, m.logger, m.panelSize)
+		intakePanel, err := intake.New(m.ctx, m.logger, m.panelSize, m.lastFile)
 		if err != nil {
 			return m.withError(err)
 		}
@@ -283,6 +252,7 @@ func (m Model) getLine(id string) tea.Cmd {
 
 // reloadColumns loads layout from file and sends column updates
 func (m Model) reloadColumns() tea.Cmd {
+
 	layout, err := loadLayout(layoutFile)
 	if err != nil {
 		return func() tea.Msg { return err }
@@ -300,5 +270,45 @@ func (m Model) reloadColumns() tea.Cmd {
 
 	return func() tea.Msg {
 		return linepanel.ColumnsMsg{Columns: layout.Columns, Fields: fields}
+	}
+}
+
+// loadStore loads a file into the store asynchronously.
+// Todo: generally straighten: dry with reloadColumns, unfuzzle store View stuff
+func (m Model) loadStore(path string) tea.Cmd {
+
+	return func() tea.Msg {
+		err := m.Store.Load(path, 0)
+		if err != nil {
+			return err
+		}
+		time.Sleep(1 * time.Second)
+		// Todo: ignore input (except ctrl-c) during load
+
+		layout, err := loadLayout(layoutFile)
+		if err != nil {
+			return err
+		}
+
+		err = layout.promote(m.Store)
+		if err != nil {
+			return err
+		}
+
+		err = m.Store.SetView(layout.Filter, nil)
+		if err != nil {
+			return err
+		}
+
+		fields, _, err := m.Store.GetView()
+		if err != nil {
+			return err
+		}
+
+		return message.FileLoadedMsg{
+			Path:    path,
+			Columns: layout.Columns,
+			Fields:  fields,
+		}
 	}
 }

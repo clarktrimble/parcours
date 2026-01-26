@@ -49,23 +49,22 @@ var intakeFiles = []board.File{
 	{Header: "Modified", Width: 12},
 }
 
-func New(ctx context.Context, lgr nt.Logger, size tea.WindowSizeMsg) (IntakePanel, error) {
+func New(ctx context.Context, lgr nt.Logger, size tea.WindowSizeMsg, lastFile string) (IntakePanel, error) {
 
-	// Todo: pass cwd in
-	cwd, err := os.Getwd()
-	if err != nil {
-		return IntakePanel{}, err
+	startPath, _ := os.Getwd()
+	if lastFile != "" {
+		startPath = filepath.Dir(lastFile)
 	}
 
 	pnl := IntakePanel{
-		currentPath: cwd,
+		currentPath: startPath,
 		ctx:         ctx,
 		logger:      lgr,
 		width:       size.Width,
 		height:      size.Height,
 	}
 
-	err = pnl.readDir()
+	err := pnl.readDir()
 	if err != nil {
 		return pnl, err
 	}
