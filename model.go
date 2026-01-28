@@ -43,7 +43,7 @@ type Model struct {
 }
 
 // NewModel creates a model with intake panel.
-func NewModel(ctx context.Context, store Store, lgr nt.Logger, lastFile string) (model Model, err error) {
+func NewModel(ctx context.Context, store Store, lgr nt.Logger, lastFile string) (model tea.Model, err error) {
 
 	intakePanel, err := intake.New(ctx, lgr, tea.WindowSizeMsg{}, lastFile)
 	if err != nil {

@@ -6,6 +6,8 @@ require (
 	charm.land/bubbletea/v2 v2.0.0-rc.2
 	charm.land/lipgloss/v2 v2.0.0-beta.3.0.20251121225325-f6fbdf23b0ff
 	github.com/charmbracelet/ultraviolet v0.0.0-20251120225753-26363bddd922
+	github.com/clarktrimble/hondo v0.0.2
+	github.com/clarktrimble/launch v0.0.3
 	github.com/clarktrimble/sabot v0.0.7
 	github.com/marcboeker/go-duckdb v1.8.5
 	github.com/pkg/errors v0.9.1
@@ -26,6 +28,7 @@ require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/google/flatbuffers v25.1.24+incompatible // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/kelseyhightower/envconfig v1.4.0 // indirect
 	github.com/klauspost/compress v1.17.11 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect

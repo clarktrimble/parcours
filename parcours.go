@@ -2,6 +2,7 @@ package parcours
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -9,10 +10,6 @@ import (
 
 	nt "parcours/entity"
 	"parcours/util"
-)
-
-const (
-	stateFile = "parcours.yml"
 )
 
 // Todo: look at delish remote_ip logging, borken with "["?
@@ -33,86 +30,86 @@ const (
 // Todo: failed to create table: Catalog Error: Table with name "logs" already exists! -- on new file
 // Todo: if last col is partly shown, we failed to adjust col view to show all of it on scroll
 
+const (
+	stateFile = "parcours.yaml"
+	stateMode = 0600
+)
+
 // Store specifies a backing datastore.
 // Todo: rename Get/Set View
 // Todo: we now rely on col order from Store, arrange to set
 type Store interface {
 	// Name returns the name of the data source
 	Name() string
-	// Load a file
+	// Load loads a file
 	Load(path string, last int) (err error)
-	// Follow a file
+	// Follow follows a file
 	Follow(ctx context.Context, path string, last int) (err error)
-	// Promote a field
+	// Promote promotes a field
 	Promote(field string) (err error)
-	//SetView Filter and Sort(s)
+	// SetView sets filter and sorts
 	SetView(filter nt.Filter, sorts []nt.Sort) (err error)
-	// GetView fields and count
+	// GetView returns fields and count
 	GetView() (fields []nt.Field, count int, err error)
-	// GetPage of log lines
+	// GetPage returns a page of log lines
 	GetPage(offset, size int) (lines []nt.Line, err error)
-	// GetJson returns raw json for a log line
+	// GetLine returns field data for a log line
 	GetLine(id string) (data map[string]any, err error)
 	// Tail streams log lines
 	Tail(ctx context.Context) (lines <-chan nt.Line, err error)
 }
 
+// State holds persisted state.
 type State struct {
 	LastFile string `yaml:"last_file"`
 }
 
-// Todo: move to util
-func workDir(dir string) string {
-	if dir == "" {
-		dir, _ = os.Getwd()
-	}
-	return dir
-}
-
+// Config holds configuration.
 type Config struct {
-	workDir string
+	WorkDir string `json:"work_dir" desc:"working directory" default:"."`
 }
 
+// Parcours is a log viewer.
 type Parcours struct {
-	state   State
 	workDir string
 	store   Store
 	logger  nt.Logger
 }
 
-func (cfg *Config) New(ctx context.Context, store Store, lgr nt.Logger) *Parcours {
-
-	dir := workDir(cfg.workDir)
-	statePath := filepath.Join(dir, stateFile)
-	state := State{}
-
-	err := util.LoadConfig(&state, statePath)
-	if err != nil {
-		lgr.Info(ctx, "no saved state", "path", statePath)
-	}
+// New creates a Parcours from Config.
+func (cfg *Config) New(store Store, lgr nt.Logger) *Parcours {
 
 	return &Parcours{
-		state:   state,
-		workDir: dir,
+		workDir: cfg.WorkDir,
 		store:   store,
 		logger:  lgr,
 	}
 }
 
-func (p *Parcours) Run(ctx context.Context) error {
+// Run runs the app.
+func (p *Parcours) Run(ctx context.Context) (err error) {
 
-	model, err := NewModel(ctx, p.store, p.logger, p.state.LastFile)
-	if err != nil {
-		return err
+	state := State{}
+	path := filepath.Join(p.workDir, stateFile)
+	err = util.Load(&state, path)
+	if errors.Is(err, os.ErrNotExist) {
+		p.logger.Info(ctx, "no saved state", "path", path)
+	} else if err != nil {
+		return
 	}
 
-	finalModel, err := tea.NewProgram(model).Run()
+	model, err := NewModel(ctx, p.store, p.logger, state.LastFile)
 	if err != nil {
-		return err
+		return
 	}
 
-	p.state.LastFile = finalModel.(Model).lastFile
+	model, err = tea.NewProgram(model).Run()
+	if err != nil {
+		return
+	}
 
-	err = util.WriteConfig(p.state, filepath.Join(p.workDir, stateFile), 0600)
+	state.LastFile = model.(Model).lastFile
+
+	err = util.Save(state, path, stateMode)
 	return err
 }
