@@ -282,7 +282,7 @@ func (m Model) loadStore(path string) tea.Cmd {
 		if err != nil {
 			return err
 		}
-		time.Sleep(1 * time.Second)
+		time.Sleep(100 * time.Millisecond)
 		// Todo: ignore input (except ctrl-c) during load
 
 		layout, err := loadLayout(layoutFile)

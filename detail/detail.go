@@ -144,6 +144,76 @@ func (pnl *DetailPanel) computeContentLines() {
 	pnl.contentLines = strings.Split(content, "\n")
 }
 
+// repairTruncatedJSON attempts to make truncated JSON valid by closing
+// unclosed strings, arrays, and objects.
+func repairTruncatedJSON(s string) string {
+	const marker = "--truncated--"
+	if !strings.HasSuffix(s, marker) {
+		return s
+	}
+
+	// Trim the marker
+	s = strings.TrimSuffix(s, marker)
+
+	// Track state as we scan
+	var stack []rune // '{' or '['
+	inString := false
+	escaped := false
+
+	for _, r := range s {
+		if escaped {
+			escaped = false
+			continue
+		}
+
+		if r == '\\' && inString {
+			escaped = true
+			continue
+		}
+
+		if r == '"' {
+			inString = !inString
+			continue
+		}
+
+		if inString {
+			continue
+		}
+
+		switch r {
+		case '{', '[':
+			stack = append(stack, r)
+		case '}':
+			if len(stack) > 0 && stack[len(stack)-1] == '{' {
+				stack = stack[:len(stack)-1]
+			}
+		case ']':
+			if len(stack) > 0 && stack[len(stack)-1] == '[' {
+				stack = stack[:len(stack)-1]
+			}
+		}
+	}
+
+	// Build repair suffix
+	var suffix strings.Builder
+
+	// Close string if we're in one
+	if inString {
+		suffix.WriteRune('"')
+	}
+
+	// Close brackets/braces in reverse order
+	for i := len(stack) - 1; i >= 0; i-- {
+		if stack[i] == '{' {
+			suffix.WriteRune('}')
+		} else {
+			suffix.WriteRune(']')
+		}
+	}
+
+	return s + suffix.String()
+}
+
 // parseJsonFields parses JSON-escaped strings in configured fields
 // Returns a new map with parsed fields
 func parseJsonFields(data map[string]any, columns []nt.Column) (map[string]any, error) {
@@ -177,7 +247,8 @@ func parseJsonFields(data map[string]any, columns []nt.Column) (map[string]any, 
 			continue
 		}
 
-		// Try to parse as JSON
+		// Try to parse as JSON, repairing if truncated
+		str = repairTruncatedJSON(str)
 		var parsed any
 		err := json.Unmarshal([]byte(str), &parsed)
 		if err == nil {
