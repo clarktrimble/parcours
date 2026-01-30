@@ -27,6 +27,8 @@ import (
 // Todo: look for ignored cmd's thruout
 // Todo: disable accel for non-lp
 
+// Todo: cannot paste into piece textinput
+
 // Todo: failed to create table: Catalog Error: Table with name "logs" already exists! -- on new file
 // Todo: if last col is partly shown, we failed to adjust col view to show all of it on scroll
 

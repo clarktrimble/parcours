@@ -145,64 +145,126 @@ func (pnl *DetailPanel) computeContentLines() {
 }
 
 // repairTruncatedJSON attempts to make truncated JSON valid by closing
-// unclosed strings, arrays, and objects.
-func repairTruncatedJSON(s string) string {
+// unclosed strings, arrays, and objects. Returns the repaired JSON and
+// the path where truncation occurred (e.g. "payload.fields.tag_number").
+func repairTruncatedJSON(s string) (string, string) {
 	const marker = "--truncated--"
 	if !strings.HasSuffix(s, marker) {
-		return s
+		return s, ""
 	}
 
-	// Trim the marker
 	s = strings.TrimSuffix(s, marker)
 
-	// Track state as we scan
-	var stack []rune // '{' or '['
+	var stack []rune     // '{' or '['
+	var path []string    // keys as we descend into objects
+	var pathDepths []int // stack depth when each path entry was added
+	var currentKey string
+	var keyBuf strings.Builder
+
 	inString := false
+	inKey := false
+	afterColon := false
 	escaped := false
 
 	for _, r := range s {
 		if escaped {
+			if inKey {
+				keyBuf.WriteRune(r)
+			}
 			escaped = false
 			continue
 		}
 
 		if r == '\\' && inString {
 			escaped = true
+			if inKey {
+				keyBuf.WriteRune(r)
+			}
 			continue
 		}
 
 		if r == '"' {
-			inString = !inString
+			if inString {
+				if inKey {
+					currentKey = keyBuf.String()
+					keyBuf.Reset()
+					inKey = false
+				}
+				inString = false
+			} else {
+				inString = true
+				// Starting a key if in object context and not after colon
+				if len(stack) > 0 && stack[len(stack)-1] == '{' && !afterColon {
+					inKey = true
+					keyBuf.Reset()
+				}
+			}
 			continue
 		}
 
 		if inString {
+			if inKey {
+				keyBuf.WriteRune(r)
+			}
 			continue
 		}
 
 		switch r {
-		case '{', '[':
+		case '{':
 			stack = append(stack, r)
+			if currentKey != "" {
+				path = append(path, currentKey)
+				pathDepths = append(pathDepths, len(stack))
+				currentKey = ""
+			}
+			afterColon = false
+		case '[':
+			stack = append(stack, r)
+			afterColon = false
 		case '}':
 			if len(stack) > 0 && stack[len(stack)-1] == '{' {
+				if len(pathDepths) > 0 && pathDepths[len(pathDepths)-1] == len(stack) {
+					path = path[:len(path)-1]
+					pathDepths = pathDepths[:len(pathDepths)-1]
+				}
 				stack = stack[:len(stack)-1]
 			}
+			afterColon = false
 		case ']':
 			if len(stack) > 0 && stack[len(stack)-1] == '[' {
 				stack = stack[:len(stack)-1]
 			}
+			afterColon = false
+		case ':':
+			afterColon = true
+		case ',':
+			// Only reset currentKey inside objects, not arrays
+			if len(stack) > 0 && stack[len(stack)-1] == '{' {
+				currentKey = ""
+			}
+			afterColon = false
 		}
 	}
 
 	// Build repair suffix
 	var suffix strings.Builder
-
-	// Close string if we're in one
 	if inString {
 		suffix.WriteRune('"')
+		if inKey {
+			// Key with no value - add null placeholder
+			suffix.WriteString(": null")
+		}
+	} else {
+		// Check for trailing comma (would produce invalid JSON)
+		trimmed := strings.TrimRight(s, " \t\n\r")
+		if strings.HasSuffix(trimmed, ",") {
+			if len(stack) > 0 && stack[len(stack)-1] == '{' {
+				suffix.WriteString(`"_": null`)
+			} else {
+				suffix.WriteString("null")
+			}
+		}
 	}
-
-	// Close brackets/braces in reverse order
 	for i := len(stack) - 1; i >= 0; i-- {
 		if stack[i] == '{' {
 			suffix.WriteRune('}')
@@ -211,7 +273,22 @@ func repairTruncatedJSON(s string) string {
 		}
 	}
 
-	return s + suffix.String()
+	// Build truncation path
+	truncPath := strings.Join(path, ".")
+	if currentKey != "" {
+		if truncPath != "" {
+			truncPath += "."
+		}
+		truncPath += currentKey
+	} else if inKey {
+		// Truncated while reading a key name
+		if truncPath != "" {
+			truncPath += "."
+		}
+		truncPath += keyBuf.String()
+	}
+
+	return s + suffix.String(), truncPath
 }
 
 // parseJsonFields parses JSON-escaped strings in configured fields
@@ -248,11 +325,14 @@ func parseJsonFields(data map[string]any, columns []nt.Column) (map[string]any, 
 		}
 
 		// Try to parse as JSON, repairing if truncated
-		str = repairTruncatedJSON(str)
+		repaired, truncPath := repairTruncatedJSON(str)
 		var parsed any
-		err := json.Unmarshal([]byte(str), &parsed)
+		err := json.Unmarshal([]byte(repaired), &parsed)
 		if err == nil {
 			result[key] = parsed
+			if truncPath != "" {
+				result["_truncated_at"] = key + "." + truncPath
+			}
 		}
 		// If parsing fails, keep original string value
 	}

@@ -7,45 +7,76 @@ import (
 
 func TestRepairTruncatedJSON(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   string
-		wantValid bool // should result be valid JSON?
+		name      string
+		input     string
+		wantValid bool   // should result be valid JSON?
+		wantPath  string // expected truncation path
 	}{
 		{
 			name:      "no truncation",
 			input:     `{"foo": "bar"}`,
 			wantValid: true,
+			wantPath:  "",
 		},
 		{
 			name:      "truncated in string",
 			input:     `{"foo": "bar--truncated--`,
 			wantValid: true,
+			wantPath:  "foo",
 		},
 		{
 			name:      "truncated in array",
 			input:     `{"items": [1, 2, 3--truncated--`,
 			wantValid: true,
+			wantPath:  "items",
 		},
 		{
 			name:      "truncated nested objects",
 			input:     `{"a": {"b": {"c": "d--truncated--`,
 			wantValid: true,
+			wantPath:  "a.b.c",
 		},
 		{
 			name:      "truncated mixed nesting",
 			input:     `{"arr": [{"key": "val--truncated--`,
 			wantValid: true,
+			wantPath:  "arr.key",
 		},
 		{
 			name:      "real world body",
 			input:     `{"id":"abc","payload":{"area":{"site_id":"main"},"fields":{"tag_number":["0,1,3,--truncated--`,
 			wantValid: true,
+			wantPath:  "payload.fields.tag_number",
+		},
+		{
+			name:      "truncated mid-key",
+			input:     `{"payload":{"fields":{"wlan_m--truncated--`,
+			wantValid: true,
+			wantPath:  "payload.fields.wlan_m",
+		},
+		{
+			name:      "truncated mid-number",
+			input:     `{"count": 123--truncated--`,
+			wantValid: true,
+			wantPath:  "count",
+		},
+		{
+			name:      "truncated with escapes",
+			input:     `{"msg": "hello \"world--truncated--`,
+			wantValid: true,
+			wantPath:  "msg",
+		},
+		{
+			name:      "truncated after comma in object",
+			input:     `{"a": 1,--truncated--`,
+			wantValid: true,
+			wantPath:  "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := repairTruncatedJSON(tt.input)
+			result, truncPath := repairTruncatedJSON(tt.input)
 
 			var parsed any
 			err := json.Unmarshal([]byte(result), &parsed)
@@ -55,6 +86,9 @@ func TestRepairTruncatedJSON(t *testing.T) {
 			}
 			if !tt.wantValid && err == nil {
 				t.Errorf("expected invalid JSON, but it parsed successfully\nresult: %s", result)
+			}
+			if truncPath != tt.wantPath {
+				t.Errorf("expected path %q, got %q", tt.wantPath, truncPath)
 			}
 		})
 	}
