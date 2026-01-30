@@ -72,6 +72,48 @@ func TestRepairTruncatedJSON(t *testing.T) {
 			wantValid: true,
 			wantPath:  "",
 		},
+		{
+			name:      "empty object truncated",
+			input:     `{--truncated--`,
+			wantValid: true,
+			wantPath:  "",
+		},
+		{
+			name:      "root level array",
+			input:     `["a", "b--truncated--`,
+			wantValid: true,
+			wantPath:  "",
+		},
+		{
+			name:      "escaped backslash",
+			input:     `{"path": "c:\\users\\--truncated--`,
+			wantValid: true,
+			wantPath:  "path",
+		},
+		{
+			name:      "whitespace in JSON",
+			input:     `{ "key" : "val--truncated--`,
+			wantValid: true,
+			wantPath:  "key",
+		},
+		{
+			name:      "boolean truncation",
+			input:     `{"flag": tru--truncated--`,
+			wantValid: true,
+			wantPath:  "flag",
+		},
+		{
+			name:      "null truncation",
+			input:     `{"val": nul--truncated--`,
+			wantValid: true,
+			wantPath:  "val",
+		},
+		{
+			name:      "deeply nested arrays",
+			input:     `{"a":[[["val--truncated--`,
+			wantValid: true,
+			wantPath:  "a",
+		},
 	}
 
 	for _, tt := range tests {
