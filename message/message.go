@@ -68,6 +68,12 @@ type OpenDetailMsg struct {
 	Columns []nt.Column
 }
 
+// OpenJsonDetailMsg requests opening JSON detail view with line data.
+type OpenJsonDetailMsg struct {
+	Line    map[string]any
+	Columns []nt.Column
+}
+
 // OpenFilterMsg requests opening filter panel.
 type OpenFilterMsg struct {
 	Field string

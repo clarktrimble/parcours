@@ -112,10 +112,7 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case board.NavUp:
 			// Scroll up by msg.Ranks
 			if lp.offset > 0 {
-				lp.offset -= msg.Count
-				if lp.offset < 0 {
-					lp.offset = 0
-				}
+				lp.offset = max(0, lp.offset-msg.Count)
 				return lp, message.GetPageCmd(lp.offset, pageSize)
 			}
 			// Can't scroll further, move cursor to top

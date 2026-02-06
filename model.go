@@ -7,7 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"parcours/detail"
+	"parcours/documentpanel"
+	"parcours/jsonpanel"
 	nt "parcours/entity"
 	"parcours/filterpanel"
 	"parcours/intake"
@@ -142,7 +143,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.push(panel), nil
 
 	case message.OpenDetailMsg:
-		return m.push(detail.New(m.ctx, msg.Columns, m.logger, m.panelSize)), m.getLine(msg.Id)
+		return m.push(documentpanel.New(m.ctx, msg.Columns, m.logger, m.panelSize)), m.getLine(msg.Id)
+
+	case message.OpenJsonDetailMsg:
+		return m.push(jsonpanel.New(m.ctx, msg.Columns, m.logger, m.panelSize)), func() tea.Msg {
+			return jsonpanel.LineMsg{Line: msg.Line}
+		}
 
 	case message.OpenIntakeMsg:
 		intakePanel, err := intake.New(m.ctx, m.logger, m.panelSize, m.lastFile)
@@ -246,7 +252,7 @@ func (m Model) getLine(id string) tea.Cmd {
 		if err != nil {
 			return err
 		}
-		return detail.LineMsg{Line: line}
+		return documentpanel.LineMsg{Line: line}
 	}
 }
 

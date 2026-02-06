@@ -1,4 +1,4 @@
-package detail
+package documentpanel
 
 import nt "parcours/entity"
 

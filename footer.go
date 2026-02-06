@@ -17,10 +17,8 @@ func RenderFooter(current, total int, filename string, width int) string {
 	// Todo: I can has unfiltered total total?
 
 	// Calculate padding
-	padding := width - lipgloss.Width(left) - lipgloss.Width(right)
-	if padding < 0 {
-		padding = 0
-	}
+	usedWidth := lipgloss.Width(left) + lipgloss.Width(right)
+	padding := max(0, width-usedWidth)
 
 	footer := style.Render(left + strings.Repeat(" ", padding) + right)
 	return footer
