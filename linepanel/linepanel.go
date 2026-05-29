@@ -17,7 +17,8 @@ const (
 
 // LinePanel displays paginated log lines using Board
 type LinePanel struct {
-	board tea.Model
+	board  tea.Model
+	keyMap KeyMap
 
 	// Data state
 	lines         []nt.Line // Current page of lines
@@ -47,6 +48,7 @@ func New(ctx context.Context, lgr nt.Logger, size tea.WindowSizeMsg) LinePanel {
 	return LinePanel{
 		ctx:    ctx,
 		logger: lgr,
+		keyMap: DefaultKeyMap(),
 		width:  size.Width,
 		height: size.Height,
 		board:  board.NewPlaceholder("Loading..."),
@@ -135,6 +137,12 @@ func (lp LinePanel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return lp, nil
+
+	case message.ReportHintsMsg:
+		// Pass to board, emit our own hints
+		var boardCmd tea.Cmd
+		lp.board, boardCmd = lp.board.Update(msg)
+		return lp, tea.Batch(boardCmd, lp.hintsCmd())
 
 	case tea.KeyPressMsg:
 		switch msg.String() {
@@ -244,4 +252,11 @@ func (lp LinePanel) cellAt(rank, file int) (field string, value nt.Value, err er
 	field = f.Header
 	value = lp.lines[rank].Values[f.SrcIdx]
 	return
+}
+
+func (lp LinePanel) hintsCmd() tea.Cmd {
+	hints := lp.keyMap.Hints()
+	return func() tea.Msg {
+		return message.HintsMsg{Hints: hints}
+	}
 }

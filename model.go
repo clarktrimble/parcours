@@ -8,10 +8,10 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"parcours/documentpanel"
-	"parcours/jsonpanel"
 	nt "parcours/entity"
 	"parcours/filterpanel"
 	"parcours/intake"
+	"parcours/jsonpanel"
 	"parcours/linepanel"
 	"parcours/message"
 	"parcours/style"
@@ -19,7 +19,7 @@ import (
 
 const (
 	layoutFile   = "layout.yaml"
-	footerHeight = 1
+	footerHeight = 2
 )
 
 // Model is the root bt model.
@@ -29,8 +29,9 @@ type Model struct {
 	logger   nt.Logger
 	ctx      context.Context
 
-	stack       []tea.Model
-	filters     []nt.Filter
+	stack   []tea.Model
+	hints   []message.Hint
+	filters []nt.Filter
 	errorString string
 
 	initialized bool
@@ -78,6 +79,13 @@ func (m Model) pop() Model {
 	return m
 }
 
+// collectHints triggers hint collection from the stack.
+func (m Model) collectHints() tea.Cmd {
+	return func() tea.Msg {
+		return message.ReportHintsMsg{}
+	}
+}
+
 func (m Model) withError(err error) (tea.Model, tea.Cmd) {
 	m.errorString = err.Error()
 	return m, nil
@@ -120,7 +128,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case message.FileSelectedMsg:
 		linePanel := linepanel.New(m.ctx, m.logger, m.panelSize)
 		m.stack = []tea.Model{linePanel}
-		return m, m.loadStore(msg.Path)
+		return m, tea.Batch(linePanel.Init(), m.loadStore(msg.Path), m.collectHints())
 
 	// Todo: loadFile is broken in Store; when fixed, consider having loadFile
 	// accept panelSize and set it on the linepanel it creates (like New funcs)
@@ -140,22 +148,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if err != nil {
 			return m.withError(err)
 		}
-		return m.push(panel), nil
+		return m.push(panel), m.collectHints()
 
 	case message.OpenDetailMsg:
-		return m.push(documentpanel.New(m.ctx, msg.Columns, m.logger, m.panelSize)), m.getLine(msg.Id)
+		m = m.push(documentpanel.New(m.ctx, msg.Columns, m.logger, m.panelSize))
+		return m, tea.Batch(m.getLine(msg.Id), m.collectHints())
 
 	case message.OpenJsonDetailMsg:
-		return m.push(jsonpanel.New(m.ctx, msg.Columns, m.logger, m.panelSize)), func() tea.Msg {
-			return jsonpanel.LineMsg{Line: msg.Line}
-		}
+		m = m.push(jsonpanel.New(m.ctx, msg.Columns, m.logger, m.panelSize))
+		return m, tea.Batch(
+			func() tea.Msg { return jsonpanel.LineMsg{Line: msg.Line} },
+			m.collectHints(),
+		)
 
 	case message.OpenIntakeMsg:
 		intakePanel, err := intake.New(m.ctx, m.logger, m.panelSize, m.lastFile)
 		if err != nil {
 			return m.withError(err)
 		}
-		return m.push(intakePanel), nil
+		return m.push(intakePanel), m.collectHints()
 
 	// Pop
 	case message.SetFilterMsg:
@@ -169,14 +180,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.filters = msg.Filters
 
-		// reset line panel
-		return m, func() tea.Msg { return linepanel.ResetMsg{} }
+		// reset line panel and collect hints
+		return m, tea.Batch(
+			func() tea.Msg { return linepanel.ResetMsg{} },
+			m.collectHints(),
+		)
 
 	case message.CloseMsg:
 		if len(m.stack) == 1 {
 			return m, tea.Quit
 		}
-		return m.pop(), nil
+		m = m.pop()
+		return m, m.collectHints()
 
 	// State
 	case message.CountMsg:
@@ -186,6 +201,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case message.SelectedMsg:
 		m.selectedRow = msg.Row
 		m.selectedId = msg.Id
+		return m, nil
+
+	// Help
+	case message.HintsChangedMsg:
+		return m, m.collectHints()
+
+	case message.ReportHintsMsg:
+		m.hints = nil
+		m.stack[m.top()], cmd = m.stack[m.top()].Update(msg)
+		return m, cmd
+
+	case message.HintsMsg:
+		m.hints = append(m.hints, msg.Hints...)
 		return m, nil
 
 	// Data
@@ -212,7 +240,7 @@ func (m Model) View() tea.View {
 	}
 
 	// Footer
-	footerContent := RenderFooter(m.selectedRow, m.total, m.Store.Name(), m.Width)
+	footerContent := RenderFooter(m.selectedRow, m.total, m.Store.Name(), m.hints, m.Width)
 	if m.errorString != "" {
 		footerContent = m.errorString
 	}

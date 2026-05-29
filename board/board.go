@@ -10,6 +10,8 @@ import (
 	"charm.land/lipgloss/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/pkg/errors"
+
+	"parcours/message"
 )
 
 const (
@@ -34,6 +36,7 @@ type Board struct {
 	ranks  []Rank
 	files  []File
 	cursor position
+	keyMap KeyMap
 
 	initialized bool              // set after first SizeMsg
 	vpWidth     int               // viewpoint width (height is header + ranks)
@@ -57,6 +60,7 @@ func New(ranks []Rank, files []File, rank, file, vpw int) (Board, error) {
 		ranks:       ranks,
 		files:       files,
 		cursor:      position{file: file, rank: rank},
+		keyMap:      DefaultKeyMap(),
 		vpWidth:     vpw,
 		initialized: true,
 		layout:      layout,
@@ -101,12 +105,15 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return brd, brd.positionCmd()
 
+	case message.ReportHintsMsg:
+		return brd, brd.hintsCmd()
+
 	case tea.KeyPressMsg:
 		if brd.editMode {
 			// Edit mode: Enter exits, everything else goes to piece
 			if msg.String() == "enter" {
 				brd.editMode = false
-				return brd, nil
+				return brd, hintsChangedCmd()
 			}
 			return brd.updatePiece(msg)
 		}
@@ -117,7 +124,7 @@ func (brd Board) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "i":
 			// Todo: editMode only makes sense for textinput
 			brd.editMode = true
-			return brd, nil
+			return brd, hintsChangedCmd()
 
 		case "up", "k":
 			return brd.accelMove(NavUp)
@@ -412,4 +419,17 @@ func (brd Board) validate() error {
 	}
 
 	return nil
+}
+
+func (brd Board) hintsCmd() tea.Cmd {
+	hints := brd.keyMap.Hints(brd.editMode)
+	return func() tea.Msg {
+		return message.HintsMsg{Hints: hints}
+	}
+}
+
+func hintsChangedCmd() tea.Cmd {
+	return func() tea.Msg {
+		return message.HintsChangedMsg{}
+	}
 }

@@ -6,6 +6,7 @@ import (
 
 	"parcours/board"
 	"parcours/board/piece"
+	"parcours/message"
 )
 
 // buildRankAndFile builds board files and ranks together in one pass
@@ -63,5 +64,5 @@ func (lp LinePanel) applyPage() (LinePanel, tea.Cmd) {
 	if err != nil {
 		return lp, func() tea.Msg { return err }
 	}
-	return lp, nil
+	return lp, func() tea.Msg { return message.HintsChangedMsg{} }
 }

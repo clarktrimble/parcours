@@ -97,3 +97,21 @@ type FileLoadedMsg struct {
 	Columns []nt.Column
 	Fields  []nt.Field
 }
+
+// Hint describes a key binding for help display.
+type Hint struct {
+	Key  string
+	Desc string
+}
+
+// HintsMsg delivers hints from a component.
+type HintsMsg struct {
+	Hints []Hint
+}
+
+// ReportHintsMsg requests components to emit their current hints.
+type ReportHintsMsg struct{}
+
+// HintsChangedMsg signals that a component's hints have changed.
+// Model responds by collecting fresh hints from the stack.
+type HintsChangedMsg struct{}
